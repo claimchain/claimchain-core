@@ -46,11 +46,14 @@ def encode_claim(G, pub, k, nonce, claim_key, claim_body):
 	claim = encode([proof, claim_body])
 	encbody, tag = aes.quick_gcm_enc(encryption_key, b"\x00"*16, claim)
 
-	return (vrfkey, lookup_key, encbody, tag)
+	all_body = encode([encbody, tag])
 
-def decode_claim(G, pub, nonce, claim_key, vrfkey, encrypted_body, tag):
+	return (vrfkey, lookup_key, all_body)
+
+def decode_claim(G, pub, nonce, claim_key, vrfkey, claim_ciphertext):
 	aes = Cipher("aes-128-gcm")
 	nkey = encode([nonce, claim_key])
+	[encrypted_body, tag] = decode(claim_ciphertext)
 	
 	# vrfkey, proof = VRF_compute(G, k, pub, nkey)
 	lookup_key = sha256("LKey||" + vrfkey).digest()[:8]

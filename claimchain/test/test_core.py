@@ -20,6 +20,6 @@ def test_encode_claim():
 	claim_body = "XXXXX"
 
 	enc = encode_claim(G, pub, k, nonce, claim_key, claim_body)
-	vrfkey, lookupkey, encrypted_body, tag  = enc
+	vrfkey, lookupkey, encrypted_body  = enc
 
-	decode_claim(G, pub, nonce, claim_key, vrfkey, encrypted_body, tag)
+	decode_claim(G, pub, nonce, claim_key, vrfkey, encrypted_body)
