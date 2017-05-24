@@ -90,6 +90,7 @@ def test_gen_load():
 		enc = encode_claim(G, pub, k, nonce, claim_key, claim_body)
 		vrfkey, lookupkey, encrypted_body  = enc
 		enc_claims += [(lookupkey, encrypted_body) ]
+
 		all_vrfs += [vrfkey]
 	t1 = time.time()
 	print("\n\t\tTiming per encoded claim: %1.1f ms" % ((t1-t0) / c0 * 1000))
@@ -97,6 +98,7 @@ def test_gen_load():
 	t0 = time.time()
 	c0 = 0
 	capabilities = []
+	cap_index = {}
 	for f in friends:
 		fpub = pubkeys[f]
 		for fof in friends[f]:
@@ -105,13 +107,14 @@ def test_gen_load():
 			vrfkey = all_vrfs[fof]
 			cap_key, cap_ciphertext = encode_capability(G, k, fpub, nonce, claim_key, vrfkey)
 			capabilities += [(cap_key, cap_ciphertext)]
+			cap_index[(f, fof)] = (cap_key, cap_ciphertext)
 	t1 = time.time()
 	print("\t\tTiming per encoded capab: %1.1f ms" % ((t1-t0) / c0 * 1000))
 
 	data = encode([enc_claims, capabilities])
 	print("\t\tData length: %1.1f kb" % (len(data) / 1024.0))
 	
-	from hippiehug import Tree
+	from hippiehug import Tree, Leaf, Branch
 
 	t0 = time.time()
 	# Build our non-equivocable tree
@@ -121,3 +124,35 @@ def test_gen_load():
 
 	t1 = time.time()
 	print("\t\tTiming for non-equiv. tree: %1.1f ms" % ((t1-t0) * 1000))
+
+	# Pick a target proof to produce
+	f1 = random.choice(friends.keys())
+	f2 = random.choice(friends[f1])
+
+	(cap_key, cap_ciphertext) = cap_index[(f1, f2)]
+	(lookupkey, encrypted_body) = enc_claims[f2]
+
+	root, E1 = t.evidence(key=cap_key)
+	_, E2 = t.evidence(key=lookupkey)
+
+	evidence_store = dict((e.identity(), e) for e in E1+E2)
+	t2 = Tree(evidence_store, root)
+
+	assert t2.is_in(key=cap_key, item=cap_ciphertext)
+	assert t2.is_in(key=lookupkey, item=encrypted_body)
+
+	# Serialize evidence:
+	Evidence = []
+	for e in E1 + E2:
+		if isinstance(e, Leaf):
+			Evidence += [(e.key, e.item)]
+		elif isinstance(e, Branch):
+			Evidence += [(e.pivot, e.left_branch, e.right_branch)]
+		else:
+			pass
+
+	# Measure its size
+	import zlib
+	Ebin = encode(Evidence)
+	print("\t\tSize ofr 1 proof: %s bytes (compressed %s bytes)" % (len(Ebin),len(Ebin_com)))
+
