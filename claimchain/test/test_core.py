@@ -151,8 +151,8 @@ def test_gen_load():
 		else:
 			pass
 
-	# Measure its size
 	import zlib
 	Ebin = encode(Evidence)
+	Ebin_com = zlib.compress(Ebin,9)
 	print("\t\tSize ofr 1 proof: %s bytes (compressed %s bytes)" % (len(Ebin),len(Ebin_com)))
 
