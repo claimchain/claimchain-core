@@ -49,7 +49,7 @@ from os import urandom
 from binascii import hexlify
 from petlib.ec import EcGroup
 from petlib.pack import encode
-
+import time
 import random
 
 def rhex(l):
@@ -81,22 +81,43 @@ def test_gen_load():
 	k = G.order().random()
 	pub = k * G.generator()
 
+	t0 = time.time()
+	c0 = 0
 	enc_claims = []
 	all_vrfs = []
 	for claim_key, claim_body in zip(labels, heads):
+		c0 += 1
 		enc = encode_claim(G, pub, k, nonce, claim_key, claim_body)
 		vrfkey, lookupkey, encrypted_body  = enc
-		enc_claims += [lookupkey, encrypted_body ]
+		enc_claims += [(lookupkey, encrypted_body) ]
 		all_vrfs += [vrfkey]
+	t1 = time.time()
+	print("\n\t\tTiming per encoded claim: %1.1f ms" % ((t1-t0) / c0 * 1000))
 
+	t0 = time.time()
+	c0 = 0
 	capabilities = []
 	for f in friends:
 		fpub = pubkeys[f]
 		for fof in friends[f]:
+			c0 += 1
 			claim_key = labels[fof]
 			vrfkey = all_vrfs[fof]
 			cap_key, cap_ciphertext = encode_capability(G, k, fpub, nonce, claim_key, vrfkey)
 			capabilities += [(cap_key, cap_ciphertext)]
+	t1 = time.time()
+	print("\t\tTiming per encoded capab: %1.1f ms" % ((t1-t0) / c0 * 1000))
 
 	data = encode([enc_claims, capabilities])
-	print("\n\t\tData length: %1.1f kb" % (len(data) / 1024.0))
+	print("\t\tData length: %1.1f kb" % (len(data) / 1024.0))
+	
+	from hippiehug import Tree
+
+	t0 = time.time()
+	# Build our non-equivocable tree
+	t = Tree()
+	for k,v in enc_claims + capabilities:
+		t.add(key=k, item=v)
+
+	t1 = time.time()
+	print("\t\tTiming for non-equiv. tree: %1.1f ms" % ((t1-t0) * 1000))
