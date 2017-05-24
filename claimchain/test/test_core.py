@@ -1,5 +1,6 @@
 from petlib.ec import EcGroup
 from .. import VRF_compute, VRF_verify, encode_claim, decode_claim
+from .. import encode_capability, decode_capability, lookup_capability
 
 def test_access():
 	assert True
@@ -22,4 +23,24 @@ def test_encode_claim():
 	enc = encode_claim(G, pub, k, nonce, claim_key, claim_body)
 	vrfkey, lookupkey, encrypted_body  = enc
 
-	decode_claim(G, pub, nonce, claim_key, vrfkey, encrypted_body)
+	claim2 = decode_claim(G, pub, nonce, claim_key, vrfkey, encrypted_body)
+	assert claim2 == claim_body
+
+def test_encode_cap():
+	G = EcGroup()
+	ka = G.order().random()
+	puba = ka * G.generator()
+	kb = G.order().random()
+	pubb = kb * G.generator()
+
+	nonce = "xxx"
+	claim_key = "yyy"
+	vrfkey = "zzz"
+
+	key, ciphertext = encode_capability(G, ka, pubb, nonce, claim_key, vrfkey)
+
+	key2 = lookup_capability(G, puba, kb, nonce, claim_key)
+	assert key == key2
+
+	vrfkey2 = decode_capability(G, puba, kb, nonce, claim_key, ciphertext)
+	assert vrfkey == vrfkey2
