@@ -44,3 +44,59 @@ def test_encode_cap():
 
 	vrfkey2 = decode_capability(G, puba, kb, nonce, claim_key, ciphertext)
 	assert vrfkey == vrfkey2
+
+from os import urandom
+from binascii import hexlify
+from petlib.ec import EcGroup
+from petlib.pack import encode
+
+import random
+
+def rhex(l):
+	return hexlify(urandom(l))[:l]
+
+def generate_test_load():
+	G = EcGroup()
+	labels = ["%s@%s.com" % (rhex(8), rhex(8)) for _ in range(200)]
+	heads = [urandom(20) for _ in range(200)]
+	secrets = [G.order().random() for _ in range(200)]
+	g = G.generator()
+	pubkeys = [s * g for s in secrets]
+
+	all_data = (labels, heads, secrets, pubkeys)
+
+	friends = {}
+	for f in range(200):
+		cap = random.sample(range(200), 5)
+		friends[f] = cap
+
+	return G, friends, all_data
+
+
+def test_gen_load():
+	G, friends, all_data = generate_test_load()
+	(labels, heads, secrets, pubkeys) = all_data
+
+	nonce = "now1"
+	k = G.order().random()
+	pub = k * G.generator()
+
+	enc_claims = []
+	all_vrfs = []
+	for claim_key, claim_body in zip(labels, heads):
+		enc = encode_claim(G, pub, k, nonce, claim_key, claim_body)
+		vrfkey, lookupkey, encrypted_body  = enc
+		enc_claims += [lookupkey, encrypted_body ]
+		all_vrfs += [vrfkey]
+
+	capabilities = []
+	for f in friends:
+		fpub = pubkeys[f]
+		for fof in friends[f]:
+			claim_key = labels[fof]
+			vrfkey = all_vrfs[fof]
+			cap_key, cap_ciphertext = encode_capability(G, k, fpub, nonce, claim_key, vrfkey)
+			capabilities += [(cap_key, cap_ciphertext)]
+
+	data = encode([enc_claims, capabilities])
+	print("\n\t\tData length: %1.1f kb" % (len(data) / 1024.0))
