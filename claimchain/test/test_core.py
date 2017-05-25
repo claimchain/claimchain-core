@@ -1,4 +1,6 @@
 from petlib.ec import EcGroup
+
+from .. import global_ec_group as G
 from .. import VRF_compute, VRF_verify, encode_claim, decode_claim
 from .. import encode_capability, decode_capability, lookup_capability
 
@@ -8,7 +10,6 @@ def test_access():
 
 
 def test_VRF():
-	G = EcGroup()
 	k = G.order().random()
 	pub = k * G.generator()
 	value, proof = VRF_compute(G, k, pub, b"test@test.com")
@@ -16,7 +17,6 @@ def test_VRF():
 
 
 def test_encode_claim():
-	G = EcGroup()
 	k = G.order().random()
 	pub = k * G.generator()
 	nonce = b"xxx"
@@ -31,7 +31,6 @@ def test_encode_claim():
 
 
 def test_encode_cap():
-	G = EcGroup()
 	ka = G.order().random()
 	puba = ka * G.generator()
 	kb = G.order().random()

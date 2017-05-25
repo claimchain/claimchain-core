@@ -1,10 +1,10 @@
 from os import urandom
 from binascii import hexlify
-from petlib.ec import EcGroup
 from petlib.pack import encode
 import time
 import random
 
+from .. import global_ec_group as G
 from .. import VRF_compute, VRF_verify, encode_claim, decode_claim
 from .. import encode_capability, decode_capability, lookup_capability
 
@@ -14,7 +14,6 @@ def rhex(l):
 
 
 def generate_test_load(nb_friends=200, nb_per_friend=5):
-	G = EcGroup()
 	labels = [b"%s@%s.com" % (rhex(8), rhex(8)) for _ in range(nb_friends)]
 	heads = [urandom(20) for _ in range(nb_friends)]
 	secrets = [G.order().random() for _ in range(nb_friends)]
@@ -23,16 +22,16 @@ def generate_test_load(nb_friends=200, nb_per_friend=5):
 
 	all_data = (labels, heads, pubkeys)
 
-	friends = {}
+	friends_graph = {}
 	for f in range(nb_friends):
 		cap = random.sample(range(nb_friends), nb_per_friend)
-		friends[f] = cap
+		friends_graph[f] = cap
 
-	return G, friends, all_data
+	return friends_graph, all_data
 
 
 def test_simulation():
-	G, friends_graph, all_data = generate_test_load()
+	friends_graph, all_data = generate_test_load()
 	(labels, heads, pubkeys) = all_data
 
 	nonce = b"now1"
