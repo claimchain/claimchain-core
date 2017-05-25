@@ -6,12 +6,17 @@ from petlib.pack import encode, decode
 
 from hashlib import sha256
 
+
+global_ec_group = EcGroup()
+
+
 model_claim_block = {
 	"Version": "1.0",
 	"Metadata": None,
 	"TreeHead": None,
 	"ChainInfo": None
 }
+
 
 def VRF_compute(G, k, pub, message):
 	g = G.generator()
@@ -95,3 +100,4 @@ def decode_capability(G, DHa, DHb_sec, nonce, claim_key, ciphertext):
 	encbody, tag = decode(ciphertext)
 	body = aes.quick_gcm_dec(secret_key, b"\x00"*16, encbody, tag)
 	return body
+
