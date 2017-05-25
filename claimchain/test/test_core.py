@@ -9,16 +9,16 @@ def test_VRF():
 	G = EcGroup()
 	k = G.order().random()
 	pub = k * G.generator()
-	value, proof = VRF_compute(G, k, pub, "test@test.com")
-	assert VRF_verify(G, pub, "test@test.com", value, proof)
+	value, proof = VRF_compute(G, k, pub, b"test@test.com")
+	assert VRF_verify(G, pub, b"test@test.com", value, proof)
 
 def test_encode_claim():
 	G = EcGroup()
 	k = G.order().random()
 	pub = k * G.generator()
-	nonce = "xxx"
-	claim_key = "george@gmail.com"
-	claim_body = "XXXXX"
+	nonce = b"xxx"
+	claim_key = b"george@gmail.com"
+	claim_body = b"XXXXX"
 
 	enc = encode_claim(G, pub, k, nonce, claim_key, claim_body)
 	vrfkey, lookupkey, encrypted_body  = enc
@@ -33,9 +33,9 @@ def test_encode_cap():
 	kb = G.order().random()
 	pubb = kb * G.generator()
 
-	nonce = "xxx"
-	claim_key = "yyy"
-	vrfkey = "zzz"
+	nonce = b"xxx"
+	claim_key = b"yyy"
+	vrfkey = b"zzz"
 
 	key, ciphertext = encode_capability(G, ka, pubb, nonce, claim_key, vrfkey)
 
@@ -57,7 +57,7 @@ def rhex(l):
 
 def generate_test_load():
 	G = EcGroup()
-	labels = ["%s@%s.com" % (rhex(8), rhex(8)) for _ in range(200)]
+	labels = [b"%s@%s.com" % (rhex(8), rhex(8)) for _ in range(200)]
 	heads = [urandom(20) for _ in range(200)]
 	secrets = [G.order().random() for _ in range(200)]
 	g = G.generator()
@@ -77,7 +77,7 @@ def test_gen_load():
 	G, friends, all_data = generate_test_load()
 	(labels, heads, secrets, pubkeys) = all_data
 
-	nonce = "now1"
+	nonce = b"now1"
 	k = G.order().random()
 	pub = k * G.generator()
 
@@ -113,7 +113,7 @@ def test_gen_load():
 
 	data = encode([enc_claims, capabilities])
 	print("\t\tData length: %1.1f kb" % (len(data) / 1024.0))
-	
+
 	from hippiehug import Tree, Leaf, Branch
 
 	t0 = time.time()
@@ -126,8 +126,8 @@ def test_gen_load():
 	print("\t\tTiming for non-equiv. tree: %1.1f ms" % ((t1-t0) * 1000))
 
 	# Pick a target proof to produce
-	f1 = random.choice(friends.keys())
-	f2 = random.choice(friends[f1])
+	f1 = random.choice(list(friends.keys()))
+	f2 = random.choice(list(friends[f1]))
 
 	(cap_key, cap_ciphertext) = cap_index[(f1, f2)]
 	(lookupkey, encrypted_body) = enc_claims[f2]

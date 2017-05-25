@@ -15,7 +15,7 @@ model_claim_block = {
 
 def VRF_compute(G, k, pub, message):
 	g = G.generator()
-	h = G.hash_to_point("1||" + message)
+	h = G.hash_to_point(b"1||" + message)
 	v = k * h
 	r = G.order().random()
 	R = r * g
@@ -26,7 +26,7 @@ def VRF_compute(G, k, pub, message):
 
 def VRF_verify(G, pub, message, value, proof):
 	g = G.generator()
-	h = G.hash_to_point("1||" + message)
+	h = G.hash_to_point(b"1||" + message)
 	v = EcPt.from_binary(value, G)
 	s, t = decode(proof)
 	R = t*g + s*pub
@@ -40,8 +40,8 @@ def encode_claim(G, pub, k, nonce, claim_key, claim_body):
 	aes = Cipher("aes-128-gcm")
 	nkey = encode([nonce, claim_key])
 	vrfkey, proof = VRF_compute(G, k, pub, nkey)
-	lookup_key = sha256("LKey||" + vrfkey).digest()[:8]
-	encryption_key = sha256("EKey||" + vrfkey).digest()[:16]
+	lookup_key = sha256(b"LKey||" + vrfkey).digest()[:8]
+	encryption_key = sha256(b"EKey||" + vrfkey).digest()[:16]
 
 	claim = encode([proof, claim_body])
 	encbody, tag = aes.quick_gcm_enc(encryption_key, b"\x00"*16, claim)
@@ -54,10 +54,10 @@ def decode_claim(G, pub, nonce, claim_key, vrfkey, claim_ciphertext):
 	aes = Cipher("aes-128-gcm")
 	nkey = encode([nonce, claim_key])
 	[encrypted_body, tag] = decode(claim_ciphertext)
-	
+
 	# vrfkey, proof = VRF_compute(G, k, pub, nkey)
-	lookup_key = sha256("LKey||" + vrfkey).digest()[:8]
-	encryption_key = sha256("EKey||" + vrfkey).digest()[:16]
+	lookup_key = sha256(b"LKey||" + vrfkey).digest()[:8]
+	encryption_key = sha256(b"EKey||" + vrfkey).digest()[:16]
 
 	#claim = encode([vrfkey, proof, claim_key, claim_body])
 	decbody = aes.quick_gcm_dec(encryption_key, b"\x00"*16, encrypted_body, tag)
@@ -73,15 +73,14 @@ def lookup_capability(G, DHa, DHb_sec, nonce, claim_key):
 	aes = Cipher("aes-128-gcm")
 	Kab = sha256((DHb_sec * DHa).export()).digest()[:16]
 
-	secret_lookup = sha256("lookup|%s|%s|%s" % (Kab, nonce, claim_key)).digest()
+	secret_lookup = sha256(b"lookup|%s|%s|%s" % (Kab, nonce, claim_key)).digest()
 	return secret_lookup
 
 def encode_capability(G, DHa_sec, DHb, nonce, claim_key, vrfkey):
 	aes = Cipher("aes-128-gcm")
 	Kab = sha256((DHa_sec * DHb).export()).digest()[:16]
-
-	secret_lookup = sha256("lookup|%s|%s|%s" % (Kab, nonce, claim_key)).digest()
-	secret_key = sha256("key|%s|%s|%s" % (Kab, nonce, claim_key)).digest()[:16]
+	secret_lookup = sha256(b"lookup|%s|%s|%s" % (Kab, nonce, claim_key)).digest()
+	secret_key = sha256(b"key|%s|%s|%s" % (Kab, nonce, claim_key)).digest()[:16]
 
 	encbody, tag = aes.quick_gcm_enc(secret_key, b"\x00"*16, vrfkey)
 	return secret_lookup, encode([encbody, tag])
@@ -91,7 +90,7 @@ def decode_capability(G, DHa, DHb_sec, nonce, claim_key, ciphertext):
 	Kab = sha256((DHb_sec * DHa).export()).digest()[:16]
 
 	# secret_lookup = sha256("lookup|%s|%s|%s" % (Kab, nonce, claim_key)).digest()
-	secret_key = sha256("key|%s|%s|%s" % (Kab, nonce, claim_key)).digest()[:16]
+	secret_key = sha256(b"key|%s|%s|%s" % (Kab, nonce, claim_key)).digest()[:16]
 
 	encbody, tag = decode(ciphertext)
 	body = aes.quick_gcm_dec(secret_key, b"\x00"*16, encbody, tag)
