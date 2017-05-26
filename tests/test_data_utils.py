@@ -3,8 +3,7 @@ import tempfile
 
 import pytest
 
-from petlib.ec import EcGroup
-
+from claimchain.crypto import PublicParams
 from claimchain.data_utils import load_data, save_data
 
 
@@ -26,7 +25,8 @@ def test_load_data(data_source):
 
 @pytest.mark.parametrize("format", ["json", "yaml"])
 def test_save_data(format):
-    G = EcGroup()
+    pp = PublicParams.get_default()
+    G = pp.ec_group
 
     labels = ['marios', 'george', 'carmela', 'bogdan']
     heads = [os.urandom(20) for _ in labels]

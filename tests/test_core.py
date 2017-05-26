@@ -1,49 +1,43 @@
 from petlib.ec import EcGroup
 
-from claimchain import default_ec_group as G
-from claimchain import VRF_compute, VRF_verify, encode_claim, decode_claim
-from claimchain import encode_capability, decode_capability, lookup_capability
-
-
-def test_access():
-	assert True
-
-
-def test_VRF():
-	k = G.order().random()
-	pub = k * G.generator()
-	value, proof = VRF_compute(G, k, pub, b"test@test.com")
-	assert VRF_verify(G, pub, b"test@test.com", value, proof)
+from claimchain import encode_claim, decode_claim
+from claimchain import encode_capability, decode_capability, get_capability_lookup_key
+from claimchain.crypto import LocalParams
 
 
 def test_encode_claim():
-	k = G.order().random()
-	pub = k * G.generator()
-	nonce = b"xxx"
-	claim_key = b"george@gmail.com"
-	claim_body = b"XXXXX"
+    nonce = b"42"
+    claim_label = b"george@george.com"
+    claim_body = b"This is a test claim"
 
-	enc = encode_claim(G, pub, k, nonce, claim_key, claim_body)
-	vrfkey, lookupkey, encrypted_body  = enc
+    with LocalParams.generate().as_default() as params:
+        enc = encode_claim(nonce, claim_label, claim_body)
+        vrf_value, lookup_key, encrypted_body = enc
 
-	claim2 = decode_claim(G, pub, nonce, claim_key, vrfkey, encrypted_body)
-	assert claim2 == claim_body
+        claim2 = decode_claim(params.vrf.pk, nonce, claim_label,
+                              vrf_value, encrypted_body)
+        assert claim2 == claim_body
 
 
 def test_encode_cap():
-	ka = G.order().random()
-	puba = ka * G.generator()
-	kb = G.order().random()
-	pubb = kb * G.generator()
+    owner_params = LocalParams.generate()
+    reader_params = LocalParams.generate()
 
-	nonce = b"xxx"
-	claim_key = b"yyy"
-	vrfkey = b"zzz"
+    nonce = b"42"
+    claim_label = b"marios@marios.com"
+    vrf_value = b"stub"
 
-	key, ciphertext = encode_capability(G, ka, pubb, nonce, claim_key, vrfkey)
+    with owner_params.as_default():
+        lookup_key, encrypted_capability = encode_capability(
+                reader_params.dh.pk, nonce, claim_label, vrf_value)
 
-	key2 = lookup_capability(G, puba, kb, nonce, claim_key)
-	assert key == key2
+    with reader_params.as_default():
+        lookup_key2 = get_capability_lookup_key(
+                owner_params.dh.pk, nonce, claim_label)
 
-	vrfkey2 = decode_capability(G, puba, kb, nonce, claim_key, ciphertext)
-	assert vrfkey == vrfkey2
+    assert lookup_key == lookup_key2
+
+    with reader_params.as_default():
+        vrf_value2 = decode_capability(
+                owner_params.dh.pk, nonce, claim_label, encrypted_capability)
+    assert vrf_value == vrf_value2

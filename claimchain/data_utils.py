@@ -1,7 +1,8 @@
 from binascii import hexlify, unhexlify
 
 from petlib.ec import EcPt, EcGroup
-from . import default_ec_group as G
+
+from claimchain.crypto import PublicParams
 
 
 def load_data(source, format='json'):
@@ -18,6 +19,8 @@ def load_data(source, format='json'):
     else:
         raise ValueError("Unknown format %s" % format)
 
+    pp = PublicParams.get_default()
+    G = pp.ec_group
     labels, heads, pubkeys = [], [], []
     for item in raw_data:
         labels.append(item["identity"])
