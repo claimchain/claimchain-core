@@ -4,3 +4,6 @@ venv
 *.pyc
 .cache
 __pycache__
+
+simulations/Enron/
+.idea
