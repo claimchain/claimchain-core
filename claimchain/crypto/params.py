@@ -13,13 +13,12 @@ class PublicParams(object):
 
 @attrs
 class Keypair(object):
-    sk = attrib()
     pk = attrib()
+    sk = attrib(default=None)
 
     @staticmethod
-    def generate(pp=None):
-        pp = pp or PublicParams.get_default()
-
+    def generate():
+        pp = PublicParams.get_default()
         G = pp.ec_group
         s = G.order().random()
         return Keypair(sk=s, pk=s * G.generator())
@@ -33,9 +32,16 @@ class LocalParams(object):
     dh = attrib(default=None)
 
     @staticmethod
-    def generate(pp=None):
+    def generate():
         return LocalParams(
-            vrf = Keypair.generate(pp),
-            sig = Keypair.generate(pp),
-            dh = Keypair.generate(pp)
+            vrf = Keypair.generate(),
+            sig = Keypair.generate(),
+            dh = Keypair.generate()
         )
+
+    def public_export(self):
+        return {
+            'vrf_pk': self.vrf.pk.export(),
+            'sig_pk': self.sig.pk.export(),
+            'dh_pk': self.dh.pk.export()
+        }
