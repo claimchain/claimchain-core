@@ -3,6 +3,6 @@ A core and experimental implementation of the claimchain distributed PKI
 
 To run tests do:
 
-	claimchain-core$ pytest -vs claimchain
+    pytest
 
 More docs to come ...

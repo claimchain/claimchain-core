@@ -4,9 +4,9 @@ from petlib.pack import encode
 import time
 import random
 
-from .. import global_ec_group as G
-from .. import VRF_compute, VRF_verify, encode_claim, decode_claim
-from .. import encode_capability, decode_capability, lookup_capability
+from claimchain import default_ec_group as G
+from claimchain import VRF_compute, VRF_verify, encode_claim, decode_claim
+from claimchain import encode_capability, decode_capability, lookup_capability
 
 
 def rhex(l):

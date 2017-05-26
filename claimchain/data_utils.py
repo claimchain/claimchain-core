@@ -1,7 +1,7 @@
 from binascii import hexlify, unhexlify
 
 from petlib.ec import EcPt, EcGroup
-from . import global_ec_group as G
+from . import default_ec_group as G
 
 
 def load_data(source, format='json'):
@@ -20,20 +20,25 @@ def load_data(source, format='json'):
 
     labels, heads, pubkeys = [], [], []
     for item in raw_data:
-        labels.append(item['identity'])
-        heads.append(unhexlify(item['latest_head']))
-        pubkeys.append(EcPt.from_binary(unhexlify(item['dh_pk']), group=G))
+        labels.append(item["identity"])
+        heads.append(unhexlify(item["latest_head"]))
+        pubkeys.append(EcPt.from_binary(unhexlify(item["dh_pk"]), group=G))
 
     return labels, heads, pubkeys
 
 
-def save_data(target, data, format='json'):
+def save_data(target, data, format="json"):
+    """
+    :param target: File writer object
+    :param data: The contacts data
+    :param format: One of ["json", "yaml"]
+    """
     out = []
     for label, head, pub in zip(*data):
         out.append(dict(
             identity=label,
-            latest_head=hexlify(head).decode('ascii'),
-            dh_pk=hexlify(pub.export()).decode('ascii')))
+            latest_head=hexlify(head).decode("ascii"),
+            dh_pk=hexlify(pub.export()).decode("ascii")))
 
     if format == "yaml":
         import yaml

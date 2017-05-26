@@ -5,7 +5,7 @@ import pytest
 
 from petlib.ec import EcGroup
 
-from ..data_utils import load_data, save_data
+from claimchain.data_utils import load_data, save_data
 
 
 @pytest.fixture

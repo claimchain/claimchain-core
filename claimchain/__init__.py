@@ -7,7 +7,7 @@ from petlib.pack import encode, decode
 from hashlib import sha256
 
 
-global_ec_group = EcGroup()
+default_ec_group = EcGroup()
 
 
 model_claim_block = {
