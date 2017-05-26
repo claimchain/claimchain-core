@@ -1,11 +1,11 @@
 from petlib.ec import EcGroup
 
-from claimchain import encode_claim, decode_claim
-from claimchain import encode_capability, decode_capability, get_capability_lookup_key
+from claimchain.core import encode_claim, decode_claim
+from claimchain.core import encode_capability, decode_capability, get_capability_lookup_key
 from claimchain.crypto import LocalParams
 
 
-def test_encode_claim():
+def test_encode_claim_correctness():
     nonce = b"42"
     claim_label = b"george@george.com"
     claim_body = b"This is a test claim"
@@ -19,7 +19,7 @@ def test_encode_claim():
         assert claim2 == claim_body
 
 
-def test_encode_cap():
+def test_encode_cap_correctness():
     owner_params = LocalParams.generate()
     reader_params = LocalParams.generate()
 
