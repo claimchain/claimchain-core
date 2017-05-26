@@ -1,3 +1,5 @@
+from binascii import hexlify
+
 from attr import attrs, attrib, Factory
 from defaultcontext import with_default_context
 from petlib.cipher import Cipher
@@ -40,8 +42,11 @@ class LocalParams(object):
         )
 
     def public_export(self):
+        def encode(point):
+            return hexlify(point.export()).decode('ascii')
+
         return {
-            'vrf_pk': self.vrf.pk.export(),
-            'sig_pk': self.sig.pk.export(),
-            'dh_pk': self.dh.pk.export()
+            'vrf_pk': encode(self.vrf.pk),
+            'sig_pk': encode(self.sig.pk),
+            'dh_pk' : encode(self.dh.pk),
         }

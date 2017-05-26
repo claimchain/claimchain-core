@@ -1,5 +1,7 @@
 import pytest
 
+from binascii import unhexlify
+
 from petlib.ec import EcPt
 
 from claimchain.crypto.params import PublicParams, LocalParams
@@ -16,7 +18,7 @@ def test_local_params_public_export(local_params):
     exported = local_params.public_export()
 
     def restore(value):
-        return EcPt.from_binary(value, group=G)
+        return EcPt.from_binary(unhexlify(value), group=G)
 
     assert restore(exported['vrf_pk']) == local_params.vrf.pk
     assert restore(exported['sig_pk']) == local_params.sig.pk
