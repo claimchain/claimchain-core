@@ -3,7 +3,6 @@
 
 import email
 import hashlib
-import heapq
 import os
 import re
 import time
@@ -11,10 +10,19 @@ import pickle
 
 import logging
 
-logging.basicConfig(level=logging.DEBUG)  # Set to .DEBUG for gory details
+logging.basicConfig(level=logging.INFO)  # Set to .DEBUG for gory details
 
 # Regex for emails
 email_pattern = re.compile('[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
+
+
+class Email:
+    def __init__(self, From, mtime, To, Cc, Bcc):
+        self.From = From
+        self.mtime = mtime
+        self.To = To
+        self.Cc = Cc
+        self.Bcc = Bcc
 
 
 def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
@@ -43,6 +51,8 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
     social = []
     recipients_per_email = {}
 
+    mail_list = []
+
     for username in os.listdir(root_folder):
         logging.info("Parsing user: %s", username)
         # check that this user was not already parsed
@@ -52,7 +62,7 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
         seen_msgs = []  # Create list to detect duplicate messages
         rset = set([]) # Create relationship set for user
 
-        sent_folders = [folder for folder in os.listdir(root_folder + '/' + username) if
+        sent_folders = [folder for folder in os.listdir(root_folder + username) if
                        'sent' in folder]  # Only process files with sent messages
 
         # Ignore users that don't have a sent folder
@@ -72,7 +82,7 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
 
         for folder in sent_folders:
 
-            for dirpath, _, filenames in os.walk(root_folder + '/' + username + '/' + folder):
+            for dirpath, _, filenames in os.walk(root_folder + username + '/' + folder):
                 for filename in filenames:
 
                     f = open(os.path.join(dirpath, filename), 'r')
@@ -89,68 +99,69 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
                     except:
                         mID = 'there is no Message-ID'
 
-                    # ReplyTo
-                    try:
-                        auxstring = msg_content['In-Reply-to']
-                        mReplyTo = int(hashlib.sha1(auxstring.lower()).hexdigest(), 16)
-                    except:
-                        mReplyTo = 'there is no ReplyTo'
-
                     # time
                     try:
                         mtime = time.mktime(email.utils.parsedate(msg_content['date']))
                     except:
                         mtime = 'there is no date'
+                        logging.info("found email without date, will ignore")
+                        continue
 
+                    mail = Email(msg_content['From'], mtime, set(), set(), set())
 
                     # receiversID
                     # To and X-to field
-                    tListTo = []
-                    field = "%s %s" % (msg_content['to'], msg_content['X-to'])
+                    field = "%s %s" % (msg_content['To'], msg_content['X-to'])
                     try:
                         field = email_pattern.findall(field)
                         for e in field:
-                            tListTo += [e.lower()]
-                            rset.add(e.lower())
-                        mReceiversID = [int(hashlib.sha1(rec).hexdigest(), 16) for rec in tListTo]
-
+                            mail.To.add(e.lower())
                     except:
-                        mReceiversID = 'there is no To'
+                        pass
 
                     # CC and X-cc field
-                    tListCc = []
+                    field = "%s %s" % (msg_content['Cc'], msg_content['X-cc'])
                     try:
-                        field = "%s %s" % (msg_content['cc'], msg_content['X-cc'])
                         field = email_pattern.findall(field)
                         for e in field:
-                            tListCc += [e.lower()]
-                            rset.add(e.lower())
-                        mCCID = [int(hashlib.sha1(rec).hexdigest(), 16) for rec in tListCc]
+                            mail.Cc.add(e.lower())
                     except:
-                        mCCID = 'there is no CC'
+                        pass
+
+                    # Bcc and X-Bcc field
+                    field = "%s %s" % (msg_content['Bcc'], msg_content['X-bcc'])
+                    try:
+                        field = email_pattern.findall(field)
+                        for e in field:
+                            mail.Bcc.add(e.lower())
+                    except:
+                        pass
 
                     if cnt_msgs % 1000 == 0:
                         logging.debug('Parsing message %d', cnt_msgs)
 
                     seen_msgs += [mID]  # Update the list of duplicates
-
                     cnt_msgs += 1 # Increment the message counter
 
-                    if msg_content['X-bcc']:
-                        logging.debug("found email with bcc")
-
-                    # Compose a unique set with the recipients of this mail
-                    tSet = set(tListTo) | set(tListCc)
+                    # Compose a unique set with the public recipients of this mail
+                    tSet = mail.To | mail.Cc
 
                     if len(tSet) == 0:
                         cnt_msgs_no_recipients += 1
-                        logging.debug("found email without name@domain.xz recipients")
+                        logging.debug("found email without public name@domain.xz recipients")
                         continue
 
+                    # Increment the counter of emails with the same number of public recipients
                     if len(tSet) not in recipients_per_email:
                         recipients_per_email[len(tSet)] = 1
                     else:
                         recipients_per_email[len(tSet)] += 1
+
+                    # Add the public recipients of this email to the relationship set of the user
+                    rset |= tSet
+
+                    # Append the email to
+                    mail_list.append(mail)
 
         # When all messages for one user are parsed, store the log
         outputfile = parsed_folder + username
@@ -166,17 +177,25 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
         f.write(s)
         f.close()
 
-        social += [{'user': username, 'friends': rset, 'numOfFriends': len(rset)}]
+        # Log the social graph of the user
+        social.append({'user': username, 'friends': rset, 'numOfFriends': len(rset)})
+
+    logging.info("Writing pickle files...")
+
+    # Sort by date all parsed emails
+    mail_list.sort(key=lambda x: x.mtime)
 
     pickle.dump(social, open(parsed_folder + "social.pkl", "wb"))
     pickle.dump(recipients_per_email, open(parsed_folder + "recipients.pkl", "wb"))
+    pickle.dump(mail_list, open(parsed_folder + "replay_log.pkl", "wb"))
 
     return social, recipients_per_email, cnt_msgs, cnt_msgs_no_recipients
 
 
 def main():
     _, _, cnt_msgs, cnt_msgs_no_recipients = processEnron()
-    print "Parsed %s messages, discarded %s" % (cnt_msgs, cnt_msgs_no_recipients)
+    print "Parsed %s messages, discarded %s because they had no valid recipient email address."\
+          % (cnt_msgs, cnt_msgs_no_recipients)
 
 
 if __name__ == "__main__":
