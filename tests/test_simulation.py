@@ -99,6 +99,7 @@ def test_simulation():
         chain = Chain(store)
         payload = {
             'version': 1,
+            'nonce': nonce.decode('ascii'),
             'metadata': params.public_export(),
             'claim_map': hexlify(tree.root()).decode('ascii')
         }

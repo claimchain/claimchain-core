@@ -11,6 +11,8 @@ from petlib.ec import EcGroup
 class PublicParams(object):
     ec_group = attrib(default=Factory(EcGroup))
     enc_cipher = attrib(default=Factory(lambda: Cipher("aes-128-gcm")))
+    enc_key_size = 16
+    short_hash_size = 8
 
 
 @attrs
