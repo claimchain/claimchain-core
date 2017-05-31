@@ -13,7 +13,7 @@ import logging
 logging.basicConfig(level=logging.INFO)  # Set to .DEBUG for gory details
 
 # Regex for emails
-email_pattern = re.compile('[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
+email_pattern = re.compile('^[^imceanotes][a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
 
 
 class Email:
@@ -178,7 +178,7 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
         f.close()
 
         # Log the social graph of the user
-        social.append({'user': username, 'friends': rset, 'numOfFriends': len(rset)})
+        social.append({'user': mail_list[-1].From, 'friends': rset, 'numOfFriends': len(rset)})
 
     logging.info("Writing pickle files...")
 
