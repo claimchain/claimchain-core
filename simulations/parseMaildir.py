@@ -54,7 +54,7 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
     mail_list = []
 
     for username in os.listdir(root_folder):
-        logging.info("Parsing user: %s", username)
+        logging.debug("Parsing user: %s", username)
         # check that this user was not already parsed
         if os.path.exists(parsed_folder + username + '.txt'):
             logging.debug("User %s was already parsed", username)
@@ -79,6 +79,8 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
             logging.info('User %s does not have enough sent messages', user_folder)
             continue
         '''
+
+        from_headers_set = set([])
 
         for folder in sent_folders:
 
@@ -107,6 +109,7 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
                         logging.info("found email without date, will ignore")
                         continue
 
+                    from_headers_set.add(msg_content['From'])
                     mail = Email(msg_content['From'], mtime, set(), set(), set())
 
                     # receiversID
@@ -163,6 +166,9 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
                     # Append the email to
                     mail_list.append(mail)
 
+        if len(from_headers_set) > 1:
+            logging.info("User %s is using multiple From headers:%s" % (username, from_headers_set))
+
         # When all messages for one user are parsed, store the log
         outputfile = parsed_folder + username
 
@@ -178,7 +184,8 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
         f.close()
 
         # Log the social graph of the user
-        social.append({'user': mail_list[-1].From, 'friends': rset, 'numOfFriends': len(rset)})
+        social.append({'user': username, 'friends': rset, 'numOfFriends': len(rset),
+                       'from_headers_set': from_headers_set})
 
     logging.info("Writing pickle files...")
 
