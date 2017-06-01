@@ -80,7 +80,7 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
             continue
         '''
 
-        from_headers_set = set([])
+        from_headers_list = []
 
         for folder in sent_folders:
 
@@ -109,7 +109,7 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
                         logging.info("found email without date, will ignore")
                         continue
 
-                    from_headers_set.add(msg_content['From'])
+                    from_headers_list.append(msg_content['From'])
                     mail = Email(msg_content['From'], mtime, set(), set(), set())
 
                     # receiversID
@@ -166,8 +166,11 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
                     # Append the email to
                     mail_list.append(mail)
 
+        from_headers_set = set(from_headers_list)
         if len(from_headers_set) > 1:
             logging.info("User %s is using multiple From headers:%s" % (username, from_headers_set))
+
+        most_used_from_header = max(from_headers_set, key=from_headers_list.count)
 
         # When all messages for one user are parsed, store the log
         outputfile = parsed_folder + username
@@ -184,8 +187,8 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
         f.close()
 
         # Log the social graph of the user
-        social.append({'user': username, 'friends': rset, 'numOfFriends': len(rset),
-                       'from_headers_set': from_headers_set})
+        social.append({'user': username, 'from_header': most_used_from_header, 'friends': rset,
+                       'numOfFriends': len(rset), 'from_headers_set': from_headers_set})
 
     logging.info("Writing pickle files...")
 

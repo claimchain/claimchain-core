@@ -20,10 +20,10 @@ def do_replay_log():
 
     # Initialize the latest known head dictionary
     for user in social:
-        enron_users.add(user['user'])
-        chain_head_dict[user['user'], user['user']] = 1
+        enron_users.add(user['from_header'])
+        chain_head_dict[user['from_header'], user['from_header']] = 1
         for friend in user['friends']:
-            chain_head_dict[(user['user'], friend)] = 0
+            chain_head_dict[(user['from_header'], friend)] = 0
 
     for email in log:
         if email.From not in enron_users:
@@ -34,11 +34,11 @@ def do_replay_log():
             chain_head_dict[(recipient, email.From)] = chain_head_dict[email.From, email.From]
             logging.debug("User %s updated the head for user %s" % (recipient, email.From))
 
-            # For all recipients, update the dict entries for the public recipients
+            # For all recipients, update the dict entries for the other public recipients
             for other in email.To | email.Cc - {recipient}:
                 if (email.From, other) in chain_head_dict:
                     if not (recipient, other) in chain_head_dict:
-                        chain_head_dict[(recipient, other)] = chain_head_dict[recipient, other]
+                        chain_head_dict[(recipient, other)] = chain_head_dict[(email.From, other)]
                         logging.debug("User %s updated the head for user %s" % (recipient, other))
 
     return chain_head_dict
@@ -52,7 +52,7 @@ def main():
     for user, friend in known_head:
         if user == friend:
             continue
-        if known_head[(user, friend)] == known_head[(user, user)]:
+        if known_head[(user, friend)] == 1:
             updated += 1
         else:
             not_updated += 1
