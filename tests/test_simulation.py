@@ -21,7 +21,7 @@ def rhex(l):
     return hexlify(urandom(l))[:l]
 
 
-def generate_test_load(nb_friends=200, nb_per_friend=5):
+def generate_test_data(nb_friends=200, nb_per_friend=5):
     labels = [b"%s@%s.com" % (rhex(8), rhex(8)) for _ in range(nb_friends)]
     heads = [urandom(20) for _ in range(nb_friends)]
     pp = PublicParams.get_default()
@@ -40,13 +40,11 @@ def generate_test_load(nb_friends=200, nb_per_friend=5):
 
 
 def test_simulation():
-    friends_graph, all_data = generate_test_load()
+    friends_graph, all_data = generate_test_data()
     (labels, heads, pubkeys) = all_data
 
     nonce = b"42"
-    params = LocalParams.generate()
-
-    with params.as_default():
+    with LocalParams.generate().as_default() as params:
 
         # Encode claims
         t0 = time.time()
