@@ -20,14 +20,44 @@ def _ensure_binary(s):
     return s
 
 
+def _compute_claim_key(vrf_value, mode='enc'):
+    assert mode in ['enc', 'lookup'], ValueError('Invalid mode')
+    pp = PublicParams.get_default()
+    size = pp.enc_key_size if mode == 'enc' else pp.lookup_key_size
+    mode = _ensure_binary(mode)
+    return pp.hash_func(b"clm_%s|%s" % (mode, vrf_value)).digest()[:size]
+
+
+def _compute_capability_key(nonce, shared_secret, claim_label, mode='enc'):
+    assert mode in ['enc', 'lookup'], ValueError('Invalid mode')
+    pp = PublicParams.get_default()
+    size = pp.enc_key_size if mode == 'enc' else pp.lookup_key_size
+    shared_secret_hash = pp.hash_func(shared_secret.export()).digest()
+    mode = _ensure_binary(mode)
+    return pp.hash_func(b"cap_%s|%s|%s|%s" %
+            (mode, nonce, shared_secret_hash, claim_label)) \
+            .digest()[:size]
+
+
+def get_capability_lookup_key(owner_dh_pk, nonce, claim_label):
+    claim_label = _ensure_binary(claim_label)
+    pp = PublicParams.get_default()
+    params = LocalParams.get_default()
+    shared_secret = params.dh.sk * owner_dh_pk
+    shared_secret_key = pp.hash_func(shared_secret.export()).digest()
+    return _compute_capability_key(
+            nonce, shared_secret, claim_label, mode='lookup')
+
+
 def encode_claim(nonce, claim_label, claim_content):
+    claim_label = _ensure_binary(claim_label)
+    claim_content = _ensure_binary(claim_content)
+
     pp = PublicParams.get_default()
     salted_label = encode([nonce, claim_label])
     vrf = do_vrf_compute(salted_label)
-    lookup_key = pp.hash_func(b"clm_lookup|" + vrf.value).digest()[:pp.short_hash_size]
-    enc_key = pp.hash_func(b"clm_enc_key|" + vrf.value).digest()[:pp.enc_key_size]
-    claim_label = _ensure_binary(claim_label)
-    claim_content = _ensure_binary(claim_content)
+    lookup_key = _compute_claim_key(vrf.value, mode='lookup')
+    enc_key = _compute_claim_key(vrf.value, mode='enc')
 
     claim = encode([vrf.proof, claim_content])
     enc_body, tag = pp.enc_cipher.quick_gcm_enc(
@@ -38,15 +68,15 @@ def encode_claim(nonce, claim_label, claim_content):
 
 
 def decode_claim(owner_vrf_pk, nonce, claim_label, vrf_value, encrypted_claim):
+    claim_label = _ensure_binary(claim_label)
+
     pp = PublicParams.get_default()
     cipher = pp.enc_cipher
     salted_label = encode([nonce, claim_label])
     (encrypted_body, tag) = decode(encrypted_claim)
-    claim_label = _ensure_binary(claim_label)
 
-    lookup_key = pp.hash_func(b"clm_lookup|" + vrf_value).digest()[:pp.short_hash_size]
-    enc_key = pp.hash_func(b"clm_enc_key|" + vrf_value).digest()[:pp.enc_key_size]
-
+    lookup_key = _compute_claim_key(vrf_value, mode='lookup')
+    enc_key = _compute_claim_key(vrf_value, mode='enc')
     raw_body = cipher.quick_gcm_dec(
             enc_key, b"\x00"*pp.enc_key_size, encrypted_body, tag)
     (proof, claim_content) = decode(raw_body)
@@ -58,30 +88,17 @@ def decode_claim(owner_vrf_pk, nonce, claim_label, vrf_value, encrypted_claim):
     return claim_content
 
 
-def get_capability_lookup_key(owner_dh_pk, nonce, claim_label):
-    pp = PublicParams.get_default()
-    params = LocalParams.get_default()
-    shared_secret = params.dh.sk * owner_dh_pk
-    shared_secret_key = pp.hash_func(shared_secret.export()).digest()
-    claim_label = _ensure_binary(claim_label)
-
-    lookup_key = pp.hash_func(b"cap_lookup|%s|%s|%s" % (
-        shared_secret_key, nonce, claim_label)).digest()[:pp.short_hash_size]
-    return lookup_key
-
-
 def encode_capability(reader_dh_pk, nonce, claim_label, vrf_value):
+    claim_label = _ensure_binary(claim_label)
     pp = PublicParams.get_default()
     cipher = pp.enc_cipher
     params = LocalParams.get_default()
-    claim_label = _ensure_binary(claim_label)
-
     shared_secret = params.dh.sk * reader_dh_pk
-    shared_secret_key = pp.hash_func(shared_secret.export()).digest()
-    lookup_key = pp.hash_func(b"cap_lookup|%s|%s|%s" %
-            (shared_secret_key, nonce, claim_label)).digest()[:pp.short_hash_size]
-    enc_key = pp.hash_func(b"cap_enc_key|%s|%s|%s" %
-            (shared_secret_key, nonce, claim_label)).digest()[:pp.enc_key_size]
+
+    lookup_key = _compute_capability_key(
+            nonce, shared_secret, claim_label, mode='lookup')
+    enc_key = _compute_capability_key(
+            nonce, shared_secret, claim_label, mode='enc')
 
     enc_body, tag = cipher.quick_gcm_enc(
             enc_key, b"\x00"*pp.enc_key_size, vrf_value)
@@ -93,12 +110,10 @@ def decode_capability(owner_dh_pk, nonce, claim_label, encrypted_capability):
     cipher = pp.enc_cipher
     params = LocalParams.get_default()
     shared_secret = params.dh.sk * owner_dh_pk
-    shared_secret_key = pp.hash_func(shared_secret.export()).digest()
-
-    enc_key = pp.hash_func(b"cap_enc_key|%s|%s|%s" %
-            (shared_secret_key, nonce, claim_label)).digest()[:pp.enc_key_size]
-
+    enc_key = _compute_capability_key(
+            nonce, shared_secret, claim_label, mode='enc')
     enc_body, tag = decode(encrypted_capability)
     vrf_value = cipher.quick_gcm_dec(
             enc_key, b"\x00"*pp.enc_key_size, enc_body, tag)
-    return vrf_value
+    claim_lookup_key = _compute_claim_key(vrf_value, mode='lookup')
+    return vrf_value, claim_lookup_key
