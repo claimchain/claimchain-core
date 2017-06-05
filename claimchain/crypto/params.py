@@ -18,7 +18,7 @@ class PublicParams(object):
     hash_func = attrib(default=Factory(lambda: sha256))
     enc_cipher = attrib(default=Factory(lambda: Cipher("aes-128-gcm")))
     enc_key_size = attrib(default=16)
-    short_hash_size = attrib(default=8)
+    lookup_key_size = attrib(default=8)
     nonce_size = attrib(default=16)
 
 

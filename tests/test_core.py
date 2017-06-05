@@ -1,7 +1,9 @@
 from petlib.ec import EcGroup
 
 from claimchain.core import encode_claim, decode_claim
-from claimchain.core import encode_capability, decode_capability, get_capability_lookup_key
+from claimchain.core import encode_capability, decode_capability, \
+        get_capability_lookup_key
+from claimchain.core import _compute_claim_key
 from claimchain.crypto import LocalParams
 
 
@@ -25,7 +27,7 @@ def test_encode_cap_correctness():
 
     nonce = b"42"
     claim_label = b"marios@marios.com"
-    vrf_value = b"stub"
+    vrf_value = b"1337"
 
     with owner_params.as_default():
         lookup_key, encrypted_capability = encode_capability(
@@ -38,6 +40,9 @@ def test_encode_cap_correctness():
     assert lookup_key == lookup_key2
 
     with reader_params.as_default():
-        vrf_value2 = decode_capability(
+        vrf_value2, claim_lookup_key2 = decode_capability(
                 owner_params.dh.pk, nonce, claim_label, encrypted_capability)
     assert vrf_value == vrf_value2
+
+    claim_lookup_key = _compute_claim_key(vrf_value, mode='lookup')
+    assert claim_lookup_key == claim_lookup_key2
