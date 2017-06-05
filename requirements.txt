@@ -1,4 +1,4 @@
--e git+https://github.com/gdanezis/rousseau-chain@965de1765bc46cf38e51a66891dc49489e11b280#egg=hippiehug&subdirectory=hippiehug-package
+-e git+https://github.com/gdanezis/rousseau-chain#egg=hippiehug&subdirectory=hippiehug-package
 six
 petlib
 pyyaml
