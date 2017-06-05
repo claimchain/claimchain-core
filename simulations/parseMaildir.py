@@ -13,7 +13,7 @@ import logging
 logging.basicConfig(level=logging.INFO)  # Set to .DEBUG for gory details
 
 # Regex for emails
-email_pattern = re.compile('^[^imceanotes][a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
+email_pattern = re.compile('[^imceanotes][a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
 
 
 class Message:
