@@ -4,6 +4,7 @@ import random
 
 from os import urandom
 from binascii import hexlify
+from pprint import pprint
 from hashlib import sha256
 
 from hippiehug import Chain
@@ -12,9 +13,10 @@ from petlib.pack import encode
 from petlib.ecdsa import do_ecdsa_setup, do_ecdsa_sign, do_ecdsa_verify
 from msgpack import packb
 
+from claimchain.state import Payload
 from claimchain.core import encode_claim, decode_claim
 from claimchain.core import encode_capability, decode_capability, get_capability_lookup_key
-from claimchain.crypto import LocalParams, PublicParams
+from claimchain.crypto import LocalParams, PublicParams, sign
 from claimchain.utils import pet2ascii
 
 
@@ -96,20 +98,12 @@ def test_simulation():
         store = {}
         t0 = time.time()
         chain = Chain(store)
-        payload = {
-            'version': 1,
-            'nonce': nonce.decode('ascii'),
-            'metadata': params.public_export(),
-            'claim_map': hexlify(tree.root()).decode('ascii')
-        }
+        payload = Payload.build(tree, nonce).export()
 
-        # Sign payload
+        pprint(payload)
+
         def sign_block(block):
-            G = PublicParams.get_default().ec_group
-            digest = sha256(json.dumps(payload).encode('ascii')).digest()
-            kinv_rp = do_ecdsa_setup(G, params.sig.sk)
-            sig = do_ecdsa_sign(G, params.sig.sk, digest, kinv_rp=kinv_rp)
-            assert do_ecdsa_verify(G, params.sig.pk, sig, digest)
+            sig = sign(block.hash())
             block.aux = pet2ascii(sig)
 
         # print(block_content)
