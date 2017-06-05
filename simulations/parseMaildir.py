@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO)  # Set to .DEBUG for gory details
 email_pattern = re.compile('^[^imceanotes][a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
 
 
-class Email:
+class Message:
     def __init__(self, From, mtime, To, Cc, Bcc):
         self.From = From
         self.mtime = mtime
@@ -114,7 +114,7 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
                         continue
 
                     from_headers_list.append(msg_content['From'])
-                    mail = Email(msg_content['From'], mtime, set(), set(), set())
+                    mail = Message(msg_content['From'], mtime, set(), set(), set())
 
                     # receiversID
                     # To and X-to field
