@@ -14,7 +14,7 @@ class VrfContainer(object):
     proof = attrib()
 
 
-def do_vrf_compute(message):
+def compute_vrf(message):
     pp = PublicParams.get_default()
     local_params = LocalParams.get_default()
 
@@ -32,7 +32,7 @@ def do_vrf_compute(message):
     return VrfContainer(value=v.export(), proof=encode((s, t)))
 
 
-def do_vrf_verify(pub, vrf, message):
+def verify_vrf(pub, vrf, message):
     pp = PublicParams.get_default()
 
     G = pp.ec_group

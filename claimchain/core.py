@@ -2,9 +2,11 @@ import six
 
 from petlib.ec import EcGroup, EcPt
 from petlib.bn import Bn
+
 from petlib.pack import encode, decode
 
-from claimchain.crypto import do_vrf_compute, do_vrf_verify, VrfContainer
+
+from claimchain.crypto import compute_vrf, verify_vrf, VrfContainer
 from claimchain.crypto import PublicParams, LocalParams
 
 
@@ -61,7 +63,7 @@ def encode_claim(nonce, claim_label, claim_content):
 
     pp = PublicParams.get_default()
     salted_label = _salt_label(nonce, claim_label)
-    vrf = do_vrf_compute(salted_label)
+    vrf = compute_vrf(salted_label)
     lookup_key = _compute_claim_key(vrf.value, mode='lookup')
     enc_key = _compute_claim_key(vrf.value, mode='enc')
 
@@ -88,7 +90,7 @@ def decode_claim(owner_vrf_pk, nonce, claim_label, vrf_value, encrypted_claim):
     (proof, claim_content) = decode(raw_body)
 
     vrf = VrfContainer(value=vrf_value, proof=proof)
-    if not do_vrf_verify(owner_vrf_pk, vrf, salted_label):
+    if not verify_vrf(owner_vrf_pk, vrf, salted_label):
         raise Exception("Wrong VRF Value")
 
     return claim_content
@@ -123,3 +125,4 @@ def decode_capability(owner_dh_pk, nonce, claim_label, encrypted_capability):
             enc_key, b"\x00"*pp.enc_key_size, enc_body, tag)
     claim_lookup_key = _compute_claim_key(vrf_value, mode='lookup')
     return vrf_value, claim_lookup_key
+

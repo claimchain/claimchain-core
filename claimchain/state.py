@@ -5,21 +5,42 @@ from hashlib import sha256
 from collections import defaultdict
 
 from attr import attrs, attrib, Factory
-from msgpack import packb, unpackb
-from petlib.ec import EcGroup, EcPt
-from petlib.bn import Bn
-from petlib.pack import encode, decode
-from petlib.ecdsa import do_ecdsa_setup, do_ecdsa_sign, do_ecdsa_verify
+
 from hippiehug import Chain
 from hippiehug import Tree
 
 from claimchain.core import get_capability_lookup_key
 from claimchain.core import encode_claim, decode_claim, encode_capability, decode_capability
 from claimchain.crypto import PublicParams, LocalParams
+from claimchain.crypto import sign
 from claimchain.utils import bytes2ascii, pet2ascii
 
 
 PROTOCOL_VERSION = 1
+
+
+@attrs
+class Payload(object):
+    metadata = attrib()
+    mtr_hash = attrib()
+    nonce = attrib(default=False)
+    timestamp = attrib(default=Factory(lambda: str(datetime.utcnow())))
+    version = attrib(default=PROTOCOL_VERSION)
+
+    @staticmethod
+    def build(tree, nonce=None):
+        return Payload(nonce=bytes2ascii(nonce),
+                       metadata=LocalParams.get_default().public_export(),
+                       mtr_hash=bytes2ascii(tree.root()))
+
+    def export(self):
+        return {
+            "version": self.version,
+            "timestamp": self.timestamp,
+            "nonce": self.nonce,
+            "metadata": self.metadata,
+            "mtr_hash": self.mtr_hash,
+        }
 
 
 class State(object):
@@ -58,25 +79,11 @@ class State(object):
             tree.add(key=lookup_key, item=enc_item)
 
         # Construct payload
-        payload = {
-            "version": PROTOCOL_VERSION,
-            "timestamp": str(datetime.utcnow()),
-            "nonce": bytes2ascii(nonce),
-            "metadata": LocalParams.get_default().public_export(),
-            "mtr_hash": bytes2ascii(tree.root()),
-        }
-
-        # Sign the payload
         def sign_block(block):
-            pp = PublicParams.get_default()
-            params = LocalParams.get_default()
-            G = pp.ec_group
-            digest = pp.hash_func(packb(block.hid)).digest()
-            kinv_rp = do_ecdsa_setup(G, params.sig.sk)
-            sig = do_ecdsa_sign(G, params.sig.sk, digest, kinv_rp=kinv_rp)
-            assert do_ecdsa_verify(G, params.sig.pk, sig, digest)
+            sig = sign(block.hash())
             block.aux = pet2ascii(sig)
 
+        payload = Payload.build(tree=tree, nonce=nonce).export()
         chain.multi_add([payload], pre_commit_fn=sign_block)
         return chain.head
 

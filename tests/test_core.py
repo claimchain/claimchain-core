@@ -4,7 +4,7 @@ from claimchain.core import encode_claim, decode_claim
 from claimchain.core import encode_capability, decode_capability, \
         get_capability_lookup_key
 from claimchain.core import _compute_claim_key
-from claimchain.crypto import LocalParams
+from claimchain.crypto import PublicParams, LocalParams
 
 
 def test_encode_claim_correctness():

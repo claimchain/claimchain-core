@@ -6,7 +6,7 @@ from petlib.pack import encode, decode
 from claimchain.state import State
 from claimchain.core import get_capability_lookup_key
 from claimchain.core import _compute_claim_key, _salt_label
-from claimchain.crypto import PublicParams, LocalParams, do_vrf_compute
+from claimchain.crypto import PublicParams, LocalParams, compute_vrf
 from claimchain.utils import ascii2bytes
 
 
@@ -68,7 +68,7 @@ def test_tree_contains_claim_lookup_key(state):
     nonce, chain, tree = commit_claims(state, [("marios", "test")])
 
     salted_label = _salt_label(nonce, "marios")
-    vrf = do_vrf_compute(salted_label)
+    vrf = compute_vrf(salted_label)
     pp = PublicParams.get_default()
 
     lookup_key = _compute_claim_key(vrf.value, mode='lookup')
