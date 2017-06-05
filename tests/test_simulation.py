@@ -15,6 +15,7 @@ from msgpack import packb
 from claimchain.core import encode_claim, decode_claim
 from claimchain.core import encode_capability, decode_capability, get_capability_lookup_key
 from claimchain.crypto import LocalParams, PublicParams
+from claimchain.utils import pet2ascii
 
 
 def rhex(l):
@@ -103,21 +104,21 @@ def test_simulation():
         }
 
         # Sign payload
-        G = PublicParams.get_default().ec_group
-        digest = sha256(json.dumps(payload).encode('ascii')).digest()
-        kinv_rp = do_ecdsa_setup(G, params.sig.sk)
-        sig = do_ecdsa_sign(G, params.sig.sk, digest, kinv_rp=kinv_rp)
-        assert do_ecdsa_verify(G, params.sig.pk, sig, digest)
+        def sign_block(block):
+            G = PublicParams.get_default().ec_group
+            digest = sha256(json.dumps(payload).encode('ascii')).digest()
+            kinv_rp = do_ecdsa_setup(G, params.sig.sk)
+            sig = do_ecdsa_sign(G, params.sig.sk, digest, kinv_rp=kinv_rp)
+            assert do_ecdsa_verify(G, params.sig.pk, sig, digest)
+            block.aux = pet2ascii(sig)
 
-        # Seal block
-        block_content = (payload, hexlify(encode(sig)))
         # print(block_content)
-        chain.multi_add([block_content])
+        chain.multi_add([payload], pre_commit_fn=sign_block)
 
         # Pack block
         block = store[chain.head]
         packed_block = packb(
-                ("S", block.sequence, block.fingers, block.length, block.items))
+                ("S", block.index, block.fingers, block.items, block.aux))
         print("\t\tPacked block size: %1.1f bytes" % (len(packed_block)))
 
         t1 = time.time()

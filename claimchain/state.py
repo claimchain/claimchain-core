@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from base64 import b64encode
 from hashlib import sha256
 from collections import defaultdict
@@ -59,30 +60,24 @@ class State(object):
         # Construct payload
         payload = {
             "version": PROTOCOL_VERSION,
+            "timestamp": str(datetime.utcnow()),
             "nonce": bytes2ascii(nonce),
             "metadata": LocalParams.get_default().public_export(),
-            # TODO: Remove bytes2ascii when hippiehug root returns ascii
-            # Currently tree.root() returns bytes, and chain.root() ascii.
             "mtr_hash": bytes2ascii(tree.root()),
         }
 
         # Sign the payload
-        pp = PublicParams.get_default()
-        params = LocalParams.get_default()
-        G = pp.ec_group
-        digest = pp.hash_func(packb(payload)).digest()
-        kinv_rp = do_ecdsa_setup(G, params.sig.sk)
-        sig = do_ecdsa_sign(G, params.sig.sk, digest, kinv_rp=kinv_rp)
-        assert do_ecdsa_verify(G, params.sig.pk, sig, digest)
+        def sign_block(block):
+            pp = PublicParams.get_default()
+            params = LocalParams.get_default()
+            G = pp.ec_group
+            digest = pp.hash_func(packb(block.hid)).digest()
+            kinv_rp = do_ecdsa_setup(G, params.sig.sk)
+            sig = do_ecdsa_sign(G, params.sig.sk, digest, kinv_rp=kinv_rp)
+            assert do_ecdsa_verify(G, params.sig.pk, sig, digest)
+            block.aux = pet2ascii(sig)
 
-        # Encode the block
-        sig = pet2ascii(sig)
-        block_content = {
-            "payload": payload,
-            "sig": sig
-        }
-        # TODO: See comment on line 64
-        chain.multi_add([block_content])
+        chain.multi_add([payload], pre_commit_fn=sign_block)
         return chain.head
 
     def clear(self):

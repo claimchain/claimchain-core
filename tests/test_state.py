@@ -55,10 +55,10 @@ def commit_claims(state, claims):
 
     block = store[head]
     block_content = block.items[0]
-    nonce = ascii2bytes(block_content['payload']['nonce'])
+    nonce = ascii2bytes(block_content['nonce'])
 
     # Get associated Merkle tree
-    mtr_hash = ascii2bytes(block.items[0]['payload']['mtr_hash'])
+    mtr_hash = ascii2bytes(block_content['mtr_hash'])
     tree = hippiehug.Tree(store, root_hash=mtr_hash)
     return nonce, chain, tree
 
