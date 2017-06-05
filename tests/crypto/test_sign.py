@@ -31,3 +31,8 @@ def test_sign_incorrect_pubkey(local_params):
     assert not verify_signature(other_params.sig.pk, sig,
             b"test@test.com")
 
+
+def test_sign_nondeterministic(local_params):
+    sig1 = sign(b"test@test.com")
+    sig2 = sign(b"test@test.com")
+    assert sig1 != sig2

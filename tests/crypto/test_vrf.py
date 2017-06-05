@@ -31,3 +31,9 @@ def test_vrf_incorrect_pubkey(local_params):
     assert not verify_vrf(other_params.vrf.pk, vrf,
             b"test@test.com")
 
+
+def test_vrf_deterministic_value(local_params):
+    vrf1 = compute_vrf(b"test@test.com")
+    vrf2 = compute_vrf(b"test@test.com")
+    assert vrf1.value == vrf2.value
+
