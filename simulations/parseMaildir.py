@@ -87,9 +87,13 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
             for dirpath, _, filenames in os.walk(root_folder + username + '/' + folder):
                 for filename in filenames:
 
-                    f = open(os.path.join(dirpath, filename), 'r')
-                    full_message = f.read()
-                    msg_content = email.message_from_string(full_message)
+                    try:
+
+                        f = open(os.path.join(dirpath, filename), 'r')
+                        full_message = f.read()
+                        msg_content = email.message_from_string(full_message)
+                    except:
+                        logging.info("Could not decode email, will discard")
 
                     # Ignore duplicate messages
                     try:
@@ -204,8 +208,8 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
 
 def main():
     _, _, cnt_msgs, cnt_msgs_no_recipients = processEnron()
-    print "Parsed %s messages, discarded %s because they had no valid recipient email address."\
-          % (cnt_msgs, cnt_msgs_no_recipients)
+    print("Parsed %s messages, discarded %s because they had no valid recipient email address."
+           % (cnt_msgs, cnt_msgs_no_recipients))
 
 
 if __name__ == "__main__":
