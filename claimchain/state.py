@@ -127,11 +127,11 @@ class View(object):
         self._validate()
 
     def _load(self):
-        self._payload = Payload.from_dict(self._block.items[0])
-        self._nonce = ascii2bytes(self._payload.nonce)
-        self._params = LocalParams.from_dict(self._payload.metadata)
+        payload = Payload.from_dict(self._block.items[0])
+        self._nonce = ascii2bytes(payload.nonce)
+        self._params = LocalParams.from_dict(payload.metadata)
         self._tree = Tree(store=self._chain.store,
-                root_hash=ascii2bytes(self._payload.mtr_hash))
+                root_hash=ascii2bytes(payload.mtr_hash))
 
     def _validate(self):
         owner_sig_pk = self._params.sig.pk
