@@ -46,7 +46,7 @@ def test_simulation():
     friends_graph, all_data = generate_test_data()
     (labels, heads, pubkeys) = all_data
 
-    nonce = b"42"
+    nonce = b"1337"
     with LocalParams.generate().as_default() as params:
 
         # Encode claims
@@ -95,28 +95,31 @@ def test_simulation():
         print("\t\tTiming for building non-equiv. tree: %1.1f ms" % ((t1-t0) * 1000))
 
         # Build a chain and a block
-        store = {}
         t0 = time.time()
-        chain = Chain(store)
-        payload = Payload.build(tree, nonce).export()
+        c1 = 1000
+        for _ in range(c1):
+            store = {}
+            chain = Chain(store)
+            payload = Payload.build(tree, nonce).export()
 
-        pprint(payload)
+            def sign_block(block):
+                sig = sign(block.hash())
+                block.aux = pet2ascii(sig)
 
-        def sign_block(block):
-            sig = sign(block.hash())
-            block.aux = pet2ascii(sig)
+            # print(block_content)
+            chain.multi_add([payload], pre_commit_fn=sign_block)
 
-        # print(block_content)
-        chain.multi_add([payload], pre_commit_fn=sign_block)
-
-        # Pack block
-        block = store[chain.head]
-        packed_block = packb(
-                ("S", block.index, block.fingers, block.items, block.aux))
-        print("\t\tPacked block size: %1.1f bytes" % (len(packed_block)))
+            # Pack block
+            block = store[chain.head]
+            packed_block = packb(
+                    ("S", block.index, block.fingers, block.items, block.aux))
 
         t1 = time.time()
-        print("\t\tTiming for building a block: %1.1f ms" % (t1-t0))
+
+        print("\t\tTiming for building a block: %1.1f ms" % ((t1-t0) / c1 * 1000))
+        print("\t\tPacked block size: %d bytes" % (len(packed_block)))
+        print("\t\tPayload:")
+        pprint(payload)
 
         # Pick a target proof to produce
         f1 = random.choice(list(friends_graph.keys()))
