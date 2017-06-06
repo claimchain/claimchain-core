@@ -58,7 +58,7 @@ class LocalParams(object):
         }
 
     @staticmethod
-    def load(exported):
+    def from_dict(exported):
         def maybe_decode(encoded_point):
             try:
                 return ascii2pet(encoded_point)

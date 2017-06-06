@@ -3,7 +3,7 @@ import pytest
 import hippiehug
 from petlib.pack import encode, decode
 
-from claimchain.state import State
+from claimchain.state import State, View
 from claimchain.core import get_capability_lookup_key
 from claimchain.core import _compute_claim_key, _salt_label
 from claimchain.crypto import PublicParams, LocalParams, compute_vrf
@@ -46,9 +46,11 @@ def test_grant_access(state):
     assert set(state.get_capabilities(reader_pk)) == {"carmela"}
 
 
-def commit_claims(state, claims):
+def commit_claims(state, claims, caps=None):
     for label, content in claims:
         state[label] = content
+    for reader_dh_pk, label in (caps or []):
+        state.grant_access(reader_dh_pk, label)
 
     store = {}
     chain = hippiehug.Chain(store)
@@ -92,3 +94,28 @@ def test_tree_contains_cap_lookup_key(state):
     leaf = evidence[-1]
     assert leaf.key == lookup_key
 
+
+def test_view_missing_and_non_existent_label(state):
+    reader_params = LocalParams.generate()
+    _, chain, tree = commit_claims(state,
+            [("marios", "test1"), ("bogdan", "test2")],
+            [(reader_params.dh.pk, ["marios"])])
+
+    with reader_params.as_default():
+        view = View(chain)
+        with pytest.raises(ValueError):
+            view["george"]
+        with pytest.raises(ValueError):
+            view["bogdan"]
+
+
+def test_view_label_retrieval(state):
+    reader_params = LocalParams.generate()
+    _, chain, tree = commit_claims(state,
+            [("marios", "test1"), ("bogdan", "test2")],
+            [(reader_params.dh.pk, ["marios", "bogdan"])])
+
+    with reader_params.as_default():
+        view = View(chain)
+        assert view["marios"] == b"test1"
+        assert view["bogdan"] == b"test2"

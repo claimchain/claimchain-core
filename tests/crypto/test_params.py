@@ -15,7 +15,7 @@ def test_local_params_public_export(local_params):
     G = PublicParams.get_default().ec_group
     exported = local_params.public_export()
 
-    local_params1 = LocalParams.load(exported)
+    local_params1 = LocalParams.from_dict(exported)
 
     assert local_params1.vrf.pk == local_params.vrf.pk
     assert local_params1.sig.pk == local_params.sig.pk

@@ -35,6 +35,7 @@ def _compute_capability_key(nonce, shared_secret, claim_label, mode='enc'):
     pp = PublicParams.get_default()
     size = pp.enc_key_size if mode == 'enc' else pp.lookup_key_size
     shared_secret_hash = pp.hash_func(shared_secret.export()).digest()
+    nonce = _ensure_binary(nonce)
     claim_label = _ensure_binary(claim_label)
     mode = _ensure_binary(mode)
     return pp.hash_func(b"cap_%s|%s|%s|%s" %
@@ -43,6 +44,7 @@ def _compute_capability_key(nonce, shared_secret, claim_label, mode='enc'):
 
 
 def _salt_label(nonce, claim_label):
+    nonce = _ensure_binary(nonce)
     claim_label = _ensure_binary(claim_label)
     return b"lab_%s.%s" % (nonce, claim_label)
 
