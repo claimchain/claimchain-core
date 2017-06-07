@@ -102,7 +102,7 @@ def test_e2e_timings():
 
         # Build a chain and a block
         t0 = time.time()
-        c0 = 1000
+        c0 = 200
         for _ in range(c0):
             chain = Chain(tree.store)
             payload = Payload.build(tree, nonce).export()

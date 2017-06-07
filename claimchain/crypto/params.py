@@ -41,20 +41,23 @@ class LocalParams(object):
     vrf = attrib(default=None)
     sig = attrib(default=None)
     dh = attrib(default=None)
+    rescue = attrib(default=None)
 
     @staticmethod
     def generate():
         return LocalParams(
             vrf = Keypair.generate(),
             sig = Keypair.generate(),
-            dh = Keypair.generate()
+            dh = Keypair.generate(),
+            rescue = Keypair.generate()
         )
 
     def public_export(self):
         return {
-            "vrf_pk": pet2ascii(self.vrf.pk),
-            "sig_pk": pet2ascii(self.sig.pk),
-            "dh_pk" : pet2ascii(self.dh.pk),
+            "vrf_pk"    : pet2ascii(self.vrf.pk),
+            "sig_pk"    : pet2ascii(self.sig.pk),
+            "dh_pk"     : pet2ascii(self.dh.pk),
+            "rescue_pk" : pet2ascii(self.rescue.pk)
         }
 
     @staticmethod
@@ -76,5 +79,6 @@ class LocalParams(object):
         params.vrf = maybe_load_keypair('vrf')
         params.sig = maybe_load_keypair('sig')
         params.dh = maybe_load_keypair('dh')
+        params.rescue = maybe_load_keypair('rescue')
         return params
 

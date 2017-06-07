@@ -123,17 +123,17 @@ class View(object):
     def __init__(self, chain):
         self._chain = chain
         self._block = chain.store[chain.head]
-        self._load()
-        self._validate()
 
-    def _load(self):
         payload = Payload.from_dict(self._block.items[0])
         self._nonce = ascii2bytes(payload.nonce)
         self._params = LocalParams.from_dict(payload.metadata)
         self._tree = Tree(store=self._chain.store,
                 root_hash=ascii2bytes(payload.mtr_hash))
 
+        self._validate()
+
     def _validate(self):
+        # TODO: This validation is incorrect for any block but the genesis
         owner_sig_pk = self._params.sig.pk
         raw_sig_backup = self._block.aux
         sig = ascii2pet(raw_sig_backup)

@@ -20,7 +20,9 @@ def test_local_params_public_export(local_params):
     assert local_params1.vrf.pk == local_params.vrf.pk
     assert local_params1.sig.pk == local_params.sig.pk
     assert local_params1.dh.pk == local_params.dh.pk
+    assert local_params1.rescue.pk == local_params.rescue.pk
     assert local_params1.vrf.sk is None
     assert local_params1.sig.sk is None
     assert local_params1.dh.sk is None
+    assert local_params1.rescue.sk is None
 

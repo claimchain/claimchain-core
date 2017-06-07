@@ -127,4 +127,3 @@ def decode_capability(owner_dh_pk, nonce, claim_label, encrypted_capability):
             enc_key, b"\x00"*pp.enc_key_size, enc_body, tag)
     claim_lookup_key = _compute_claim_key(vrf_value, mode='lookup')
     return vrf_value, claim_lookup_key
-
