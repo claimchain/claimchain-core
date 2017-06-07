@@ -1,32 +1,17 @@
-import six
-
 from petlib.ec import EcGroup, EcPt
 from petlib.bn import Bn
-
 from petlib.pack import encode, decode
 
-
-from claimchain.crypto import compute_vrf, verify_vrf, VrfContainer
-from claimchain.crypto import PublicParams, LocalParams
-
-
-def _ensure_binary(s):
-    """
-    >>> _ensure_binary(b"test")
-    b"test"
-    >>> _ensure_binary(u"test")
-    b"test"
-    """
-    if not isinstance(s, six.binary_type):
-        s = s.encode('utf-8')
-    return s
+from .crypto import compute_vrf, verify_vrf, VrfContainer
+from .crypto import PublicParams, LocalParams
+from .utils import ensure_binary
 
 
 def _compute_claim_key(vrf_value, mode='enc'):
     assert mode in ['enc', 'lookup'], ValueError('Invalid mode')
     pp = PublicParams.get_default()
     size = pp.enc_key_size if mode == 'enc' else pp.lookup_key_size
-    mode = _ensure_binary(mode)
+    mode = ensure_binary(mode)
     return pp.hash_func(b"clm_%s|%s" % (mode, vrf_value)).digest()[:size]
 
 
@@ -35,22 +20,23 @@ def _compute_capability_key(nonce, shared_secret, claim_label, mode='enc'):
     pp = PublicParams.get_default()
     size = pp.enc_key_size if mode == 'enc' else pp.lookup_key_size
     shared_secret_hash = pp.hash_func(shared_secret.export()).digest()
-    nonce = _ensure_binary(nonce)
-    claim_label = _ensure_binary(claim_label)
-    mode = _ensure_binary(mode)
+    nonce = ensure_binary(nonce)
+    claim_label = ensure_binary(claim_label)
+    mode = ensure_binary(mode)
     return pp.hash_func(b"cap_%s|%s|%s|%s" %
             (mode, nonce, shared_secret_hash, claim_label)) \
             .digest()[:size]
 
 
 def _salt_label(nonce, claim_label):
-    nonce = _ensure_binary(nonce)
-    claim_label = _ensure_binary(claim_label)
+    nonce = ensure_binary(nonce)
+    claim_label = ensure_binary(claim_label)
     return b"lab_%s.%s" % (nonce, claim_label)
 
 
 def get_capability_lookup_key(owner_dh_pk, nonce, claim_label):
-    claim_label = _ensure_binary(claim_label)
+    nonce = ensure_binary(nonce)
+    claim_label = ensure_binary(claim_label)
     pp = PublicParams.get_default()
     params = LocalParams.get_default()
     shared_secret = params.dh.sk * owner_dh_pk
@@ -60,8 +46,8 @@ def get_capability_lookup_key(owner_dh_pk, nonce, claim_label):
 
 
 def encode_claim(nonce, claim_label, claim_content):
-    claim_label = _ensure_binary(claim_label)
-    claim_content = _ensure_binary(claim_content)
+    claim_label = ensure_binary(claim_label)
+    claim_content = ensure_binary(claim_content)
 
     pp = PublicParams.get_default()
     salted_label = _salt_label(nonce, claim_label)
@@ -78,7 +64,7 @@ def encode_claim(nonce, claim_label, claim_content):
 
 
 def decode_claim(owner_vrf_pk, nonce, claim_label, vrf_value, encrypted_claim):
-    claim_label = _ensure_binary(claim_label)
+    claim_label = ensure_binary(claim_label)
 
     pp = PublicParams.get_default()
     cipher = pp.enc_cipher
@@ -99,7 +85,7 @@ def decode_claim(owner_vrf_pk, nonce, claim_label, vrf_value, encrypted_claim):
 
 
 def encode_capability(reader_dh_pk, nonce, claim_label, vrf_value):
-    claim_label = _ensure_binary(claim_label)
+    claim_label = ensure_binary(claim_label)
     pp = PublicParams.get_default()
     cipher = pp.enc_cipher
     params = LocalParams.get_default()

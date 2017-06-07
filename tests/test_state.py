@@ -103,9 +103,9 @@ def test_view_missing_and_non_existent_label(state):
 
     with reader_params.as_default():
         view = View(chain)
-        with pytest.raises(ValueError):
+        with pytest.raises(KeyError):
             view["george"]
-        with pytest.raises(ValueError):
+        with pytest.raises(KeyError):
             view["bogdan"]
 
 

@@ -2,7 +2,7 @@ import base64
 
 from hashlib import sha256
 
-from attr import attrs, attrib, Factory
+from attr import asdict, attrs, attrib, Factory
 from defaultcontext import with_default_context
 from petlib.cipher import Cipher
 from petlib.ec import EcGroup, EcPt
@@ -53,12 +53,11 @@ class LocalParams(object):
         )
 
     def public_export(self):
-        return {
-            "vrf_pk"    : pet2ascii(self.vrf.pk),
-            "sig_pk"    : pet2ascii(self.sig.pk),
-            "dh_pk"     : pet2ascii(self.dh.pk),
-            "rescue_pk" : pet2ascii(self.rescue.pk)
-        }
+        result = {}
+        for name, attr in asdict(self, recurse=False).items():
+            if isinstance(attr, Keypair):
+                result[name + '_pk'] = pet2ascii(attr.pk)
+        return result
 
     @staticmethod
     def from_dict(exported):
