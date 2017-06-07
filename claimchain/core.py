@@ -35,6 +35,7 @@ def _salt_label(nonce, claim_label):
 
 
 def get_capability_lookup_key(owner_dh_pk, nonce, claim_label):
+    nonce = ensure_binary(nonce)
     claim_label = ensure_binary(claim_label)
     pp = PublicParams.get_default()
     params = LocalParams.get_default()
