@@ -48,7 +48,7 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
     cnt_msgs = 0
     cnt_msgs_no_recipients = 0
 
-    social = []
+    social = {}
     recipients_per_email = {}
 
     mail_list = []
@@ -176,23 +176,9 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
 
         most_used_from_header = max(from_headers_set, key=from_headers_list.count)
 
-        # When all messages for one user are parsed, store the log
-        outputfile = parsed_folder + username
-
-        # Store data in hard drive
-        f = open(outputfile + '.txt', 'w')
-
-        f.write('Friends:\n')
-        for r in rset:
-            f.write(r + ' ')
-
-        s = '\nNum of Friends: %s\n' % (len(rset))
-        f.write(s)
-        f.close()
-
         # Log the social graph of the user
-        social.append({'user': username, 'from_header': most_used_from_header, 'friends': rset,
-                       'numOfFriends': len(rset), 'from_headers_set': from_headers_set})
+        social[most_used_from_header] = {'user': username, 'friends': rset, 'num_of_friends': len(rset),
+                                               'from_headers_set': from_headers_set}
 
     logging.info("Writing pickle files...")
 
