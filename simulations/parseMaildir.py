@@ -25,7 +25,64 @@ class Message:
         self.Bcc = Bcc
 
 
-def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
+def parse_mail(dirpath, filename):
+    try:
+
+        f = open(os.path.join(dirpath, filename), 'r')
+        full_message = f.read()
+        msg_content = email.message_from_string(full_message)
+    except:
+        raise Exception("Could not decode email, will discard")
+
+    # Ignore duplicate messages
+    try:
+        aux_string = msg_content['Message-ID']
+        mID = int(hashlib.sha1(aux_string.lower().encode('utf-8')).hexdigest(), 16)
+    except:
+        raise Exception("Found email without mID")
+
+    # time
+    try:
+        mtime = time.mktime(email.utils.parsedate(msg_content['date']))
+    except:
+        mtime = 'there is no date'
+        logging.info("found email without date, will ignore")
+        return
+
+    mail = Message(msg_content['From'], mtime, set(), set(), set())
+
+    # receiversID
+    # To and X-to field
+    field = "%s %s" % (msg_content['To'], msg_content['X-to'])
+    try:
+        field = email_pattern.findall(field)
+        for e in field:
+            mail.To.add(e.lower())
+    except:
+        pass
+
+    # CC and X-cc field
+    field = "%s %s" % (msg_content['Cc'], msg_content['X-cc'])
+    try:
+        field = email_pattern.findall(field)
+        for e in field:
+            mail.Cc.add(e.lower())
+    except:
+        pass
+
+    # Bcc and X-Bcc field
+    field = "%s %s" % (msg_content['Bcc'], msg_content['X-bcc'])
+    try:
+        field = email_pattern.findall(field)
+        for e in field:
+            mail.Bcc.add(e.lower())
+    except:
+        pass
+
+    return mail, mID
+
+
+def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
     ####################################################################
     ##        SAMPLE EMAIL FROM ENRON DATASET (fields of interest)
     ##
@@ -47,11 +104,14 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
 
     cnt_msgs = 0
     cnt_msgs_no_recipients = 0
+    cnt_msgs_invalid = 0
+    cnt_msgs_dup = 0
 
     social = {}
     recipients_per_email = {}
 
     mail_list = []
+    seen_msgs = []  # Create list to detect duplicate messages
 
     for username in os.listdir(root_folder):
         logging.debug("Parsing user: %s", username)
@@ -59,19 +119,17 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
         if os.path.exists(parsed_folder + username + '.txt'):
             logging.debug("User %s was already parsed", username)
 
-        seen_msgs = []  # Create list to detect duplicate messages
         rset = set([]) # Create relationship set for user
+        from_headers_list = []
 
         sent_folders = [folder for folder in os.listdir(root_folder + username) if
                        'sent' in folder]  # Only process files with sent messages
 
-        # Ignore users that don't have a sent folder
+        '''
+        Uncomment for ignoring users who don't have a Sent directory, or have less than 20 sent messages
         if len(sent_folders) == 0:
             continue
-
-        '''
-        Uncomment for ignoring users with less than 20 sent messages
-        # Only process user if there are more than 20 sent messages
+        
         counter = 0
         for folder in sent_folders:
             counter += len(os.listdir(root_folder+'/'+user_folder+'/'+folder))
@@ -80,78 +138,30 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
             continue
         '''
 
-        from_headers_list = []
-
         for folder in sent_folders:
-
             for dirpath, _, filenames in os.walk(root_folder + username + '/' + folder):
                 for filename in filenames:
-
-                    try:
-
-                        f = open(os.path.join(dirpath, filename), 'r')
-                        full_message = f.read()
-                        msg_content = email.message_from_string(full_message)
-                    except:
-                        logging.info("Could not decode email, will discard")
-
-                    # Ignore duplicate messages
-                    try:
-                        aux_string = msg_content['Message-ID']
-                        mID = int(hashlib.sha1(aux_string.lower()).hexdigest(), 16)
-                        if mID in seen_msgs:
-                            print ('*',)
-                            continue
-                    except:
-                        mID = 'there is no Message-ID'
-
-                    # time
-                    try:
-                        mtime = time.mktime(email.utils.parsedate(msg_content['date']))
-                    except:
-                        mtime = 'there is no date'
-                        logging.info("found email without date, will ignore")
-                        continue
-
-                    from_headers_list.append(msg_content['From'])
-                    mail = Message(msg_content['From'], mtime, set(), set(), set())
-
-                    # receiversID
-                    # To and X-to field
-                    field = "%s %s" % (msg_content['To'], msg_content['X-to'])
-                    try:
-                        field = email_pattern.findall(field)
-                        for e in field:
-                            mail.To.add(e.lower())
-                    except:
-                        pass
-
-                    # CC and X-cc field
-                    field = "%s %s" % (msg_content['Cc'], msg_content['X-cc'])
-                    try:
-                        field = email_pattern.findall(field)
-                        for e in field:
-                            mail.Cc.add(e.lower())
-                    except:
-                        pass
-
-                    # Bcc and X-Bcc field
-                    field = "%s %s" % (msg_content['Bcc'], msg_content['X-bcc'])
-                    try:
-                        field = email_pattern.findall(field)
-                        for e in field:
-                            mail.Bcc.add(e.lower())
-                    except:
-                        pass
-
                     if cnt_msgs % 1000 == 0:
                         logging.debug('Parsing message %d', cnt_msgs)
+
+                    try:
+                        mail, mID = parse_mail(dirpath, filename)
+                    except Exception as e:
+                        logging.debug("Discard message: " + str(e))
+                        continue
+
+                    if mID in seen_msgs:
+                        logging.info("Found duplicate email")
+                        cnt_msgs_dup += 1
+                        continue
 
                     seen_msgs += [mID]  # Update the list of duplicates
                     cnt_msgs += 1 # Increment the message counter
 
                     # Compose a unique set with the public recipients of this mail
                     tSet = mail.To | mail.Cc
+
+                    from_headers_list.append(mail.From)
 
                     if len(tSet) == 0:
                         cnt_msgs_no_recipients += 1
@@ -178,7 +188,32 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
 
         # Log the social graph of the user
         social[most_used_from_header] = {'user': username, 'friends': rset, 'num_of_friends': len(rset),
-                                               'from_headers_set': from_headers_set}
+                                         'from_headers_set': from_headers_set}
+
+        received_folders = [folder for folder in os.listdir(root_folder + username) if
+                       'sent' not in folder]  # Parse emails in other directories
+        for folder in received_folders:
+            for dirpath, _, filenames in os.walk(root_folder + username + '/' + folder):
+                for filename in filenames:
+                    if cnt_msgs % 1000 == 0:
+                        logging.debug('Parsing message %d', cnt_msgs)
+
+                    try:
+                        mail, mID = parse_mail(dirpath, filename)
+                    except Exception as e:
+                        logging.debug("Discard message: " + str(e))
+                        cnt_msgs_invalid += 1
+                        continue
+
+                    if mID in seen_msgs:
+                        logging.info("Found duplicate email")
+                        cnt_msgs_dup += 1
+                        continue
+
+                    seen_msgs += [mID]  # Update the list of duplicates
+                    cnt_msgs += 1  # Increment the message counter
+
+                    mail_list.append(mail)
 
     logging.info("Writing pickle files...")
 
@@ -193,7 +228,7 @@ def processEnron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
 
 
 def main():
-    _, _, cnt_msgs, cnt_msgs_no_recipients = processEnron()
+    _, _, cnt_msgs, cnt_msgs_no_recipients = process_enron()
     print("Parsed %s messages, discarded %s because they had no valid recipient email address."
            % (cnt_msgs, cnt_msgs_no_recipients))
 
