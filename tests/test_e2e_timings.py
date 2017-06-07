@@ -162,7 +162,7 @@ def test_e2e_timings():
         evidence = []
         for e in e1 + e2:
             if isinstance(e, Leaf):
-                evidence += [(e.key, e.item)]
+                evidence += [(e.key, e.item, tree.store[e.item])]
             elif isinstance(e, Branch):
                 evidence += [(e.pivot, e.left_branch, e.right_branch)]
             else:
