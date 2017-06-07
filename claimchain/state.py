@@ -135,10 +135,14 @@ class View(object):
 
     def _validate(self):
         owner_sig_pk = self._params.sig.pk
-        sig = ascii2pet(self._block.aux)
+        raw_sig_backup = self._block.aux
+        sig = ascii2pet(raw_sig_backup)
         self._block.aux = None
         if not verify_signature(owner_sig_pk, sig, self._block.hash()):
+            self._block.aux = raw_sig_backup
             raise ValueError("Invalid signature.")
+        self._block.aux = raw_sig_backup
+
 
     def __getitem__(self, claim_label):
         owner_dh_pk = self._params.dh.pk

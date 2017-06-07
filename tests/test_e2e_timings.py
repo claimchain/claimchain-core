@@ -1,3 +1,4 @@
+import os
 import time
 import json
 import random
@@ -13,10 +14,10 @@ from petlib.pack import encode
 from petlib.ecdsa import do_ecdsa_setup, do_ecdsa_sign, do_ecdsa_verify
 from msgpack import packb
 
-from claimchain.state import Payload
+from claimchain.state import Payload, State, View
 from claimchain.core import encode_claim, decode_claim
 from claimchain.core import encode_capability, decode_capability, get_capability_lookup_key
-from claimchain.crypto import LocalParams, PublicParams, sign
+from claimchain.crypto import LocalParams, PublicParams, sign, Keypair
 from claimchain.utils import pet2ascii
 
 
@@ -32,7 +33,8 @@ def generate_test_data(nb_friends=200, nb_per_friend=5):
 
     params_per_friend = [LocalParams.generate() for _ in range(nb_friends)]
     pubkeys = [params.dh.pk for params in params_per_friend]
-    all_data = (labels, heads, pubkeys)
+    privkeys = [params.dh.sk for params in params_per_friend]
+    all_data = (labels, heads, pubkeys, privkeys)
 
     friends_graph = {}
     for f in range(nb_friends):
@@ -42,12 +44,12 @@ def generate_test_data(nb_friends=200, nb_per_friend=5):
     return friends_graph, all_data
 
 
-def test_simulation():
+def test_e2e_timings():
     friends_graph, all_data = generate_test_data()
-    (labels, heads, pubkeys) = all_data
+    (labels, heads, pubkeys, privkeys) = all_data
 
-    nonce = b"1337"
     with LocalParams.generate().as_default() as params:
+        nonce = os.urandom(PublicParams.get_default().nonce_size)
 
         # Encode claims
         t0 = time.time()
@@ -88,38 +90,57 @@ def test_simulation():
         # Build our non-equivocable tree
         t0 = time.time()
         tree = Tree()
-        for k, v in enc_claims + capabilities:
-            tree.add(key=k, item=v)
+        for lookup_key, enc_item in enc_claims + capabilities:
+            tree.add(key=lookup_key, item=enc_item)
+            _, evidence = tree.evidence(key=lookup_key)
+            assert tree.is_in(enc_item, key=lookup_key)
+            enc_item_hash = evidence[-1].item
+            tree.store[enc_item_hash] = enc_item
 
         t1 = time.time()
         print("\t\tTiming for building non-equiv. tree: %1.1f ms" % ((t1-t0) * 1000))
 
         # Build a chain and a block
         t0 = time.time()
-        c1 = 1000
-        for _ in range(c1):
-            store = {}
-            chain = Chain(store)
+        c0 = 1000
+        for _ in range(c0):
+            chain = Chain(tree.store)
             payload = Payload.build(tree, nonce).export()
 
             def sign_block(block):
                 sig = sign(block.hash())
                 block.aux = pet2ascii(sig)
 
-            # print(block_content)
             chain.multi_add([payload], pre_commit_fn=sign_block)
 
             # Pack block
-            block = store[chain.head]
+            block = chain.store[chain.head]
             packed_block = packb(
                     ("S", block.index, block.fingers, block.items, block.aux))
 
         t1 = time.time()
 
-        print("\t\tTiming for building a block: %1.1f ms" % ((t1-t0) / c1 * 1000))
+        print("\t\tTiming for building a block: %1.1f ms" % ((t1-t0) / c0 * 1000))
         print("\t\tPacked block size: %d bytes" % (len(packed_block)))
-        print("\t\tPayload:")
-        pprint(payload)
+
+        t0 = time.time()
+        c0 = 0
+
+        # Pick a random reader
+        for reader in friends_graph:
+            reader_params = LocalParams(
+                    dh=Keypair(sk=privkeys[reader], pk=pubkeys[reader]))
+            for reader_friend in friends_graph[reader]:
+                claim_label = labels[reader_friend]
+                with reader_params.as_default():
+                    view = View(chain)
+                    c0 += 1
+                    head = view[labels[reader_friend]]
+                    assert head == heads[reader_friend]
+
+        t1 = time.time()
+        print("\t\tTiming for retrieving a claim by label: %1.1f ms" %
+                ((t1-t0) / c0 * 1000))
 
         # Pick a target proof to produce
         f1 = random.choice(list(friends_graph.keys()))
@@ -153,3 +174,5 @@ def test_simulation():
         print("\t\tSize for one proof: %s bytes (compressed %s bytes)" %
                 (len(bin_evidence), len(bin_evidence_compressed)))
 
+        print("\t\tPayload:")
+        pprint(payload)
