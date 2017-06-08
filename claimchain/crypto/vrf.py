@@ -6,6 +6,7 @@ from petlib.pack import encode, decode
 from hashlib import sha256
 
 from .params import PublicParams, LocalParams
+from ..utils import profiled
 
 
 @attrs
@@ -14,6 +15,7 @@ class VrfContainer(object):
     proof = attrib()
 
 
+@profiled
 def compute_vrf(message):
     pp = PublicParams.get_default()
     local_params = LocalParams.get_default()
@@ -32,6 +34,7 @@ def compute_vrf(message):
     return VrfContainer(value=v.export(), proof=encode((s, t)))
 
 
+@profiled
 def verify_vrf(pub, vrf, message):
     pp = PublicParams.get_default()
 
