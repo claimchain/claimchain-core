@@ -43,34 +43,6 @@ class Payload(object):
         return asdict(self)
 
 
-def _encode_claims(nonce, claim_content_by_label):
-    enc_items_map = {}
-    vrf_value_by_label = {}
-    for claim_label, claim_content in claim_content_by_label.items():
-        vrf_value, lookup_key, enc_claim = encode_claim(
-                nonce, claim_label, claim_content)
-        enc_items_map[lookup_key] = enc_claim
-        vrf_value_by_label[claim_label] = vrf_value
-    return enc_items_map, vrf_value_by_label
-
-
-def _encode_capabilities(nonce, caps_by_reader_pk, vrf_value_by_label):
-    enc_items_map = {}
-    for reader_dh_pk, caps in caps_by_reader_pk.items():
-        for claim_label in caps:
-            try:
-                vrf_value = vrf_value_by_label[claim_label]
-            except KeyError:
-                warnings.warn("VRF for %s not computed. "
-                              "Skipping adding a capability." \
-                              % claim_label)
-                break
-            lookup_key, enc_cap = encode_capability(
-                    reader_dh_pk, nonce, claim_label, vrf_value)
-            enc_items_map[lookup_key] = enc_cap
-    return enc_items_map
-
-
 @profiled
 def _build_tree(store, enc_items_map):
     tree = Tree(store)
@@ -90,30 +62,59 @@ class State(object):
         self._claim_content_by_label = {}
         self._caps_by_reader_pk = defaultdict(set)
 
+        self._enc_items_map = {}
+        self._vrf_value_by_label = {}
+        self._payload = None
+        self._tree = None
+
     def commit(self, target_chain, nonce=None):
         nonce = nonce or os.urandom(PublicParams.get_default().nonce_size)
 
         # Encode claims
-        enc_items_map, vrf_value_by_label = _encode_claims(nonce,
-                self._claim_content_by_label)
+        enc_items_map = {}
+        vrf_value_by_label = {}
+        for claim_label, claim_content in self._claim_content_by_label.items():
+            vrf_value, lookup_key, enc_claim = encode_claim(
+                    nonce, claim_label, claim_content)
+            enc_items_map[lookup_key] = enc_claim
+            vrf_value_by_label[claim_label] = vrf_value
 
         # Encode capabilities
-        enc_caps_map = _encode_capabilities(nonce,
-                self._caps_by_reader_pk, vrf_value_by_label)
+        for reader_dh_pk, caps in self._caps_by_reader_pk.items():
+            for claim_label in caps:
+                try:
+                    vrf_value = vrf_value_by_label[claim_label]
+                except KeyError:
+                    warnings.warn("VRF for %s not computed. "
+                                  "Skipping adding a capability." \
+                                  % claim_label)
+                    break
+                lookup_key, enc_cap = encode_capability(
+                        reader_dh_pk, nonce, claim_label, vrf_value)
+                enc_items_map[lookup_key] = enc_cap
 
         # Put all the encrypted items in a new tree
-        enc_items_map.update(enc_caps_map)
         tree = _build_tree(target_chain.store, enc_items_map)
 
         # Construct payload
         payload = Payload.build(tree=tree, nonce=nonce).export()
         target_chain.multi_add([payload], pre_commit_fn=_sign_block)
 
+        self._payload = payload
+        self._tree = tree
+        self._enc_items_map = enc_items_map
+        self._vrf_value_by_label = vrf_value_by_label
+
         return target_chain.head
 
     def clear(self):
         self._claim_content_by_label.clear()
         self._caps_by_reader_pk.clear()
+
+        self._enc_items_map.clear()
+        self._vrf_value_by_label.clear()
+        self._payload = None
+        self._tree = None
 
     def _compute_claim_lookup_key(self, vrf):
         pp = PublicParams.get_default()
@@ -168,7 +169,6 @@ class View(object):
             raise ValueError("Invalid signature.")
         self._block.aux = raw_sig_backup
 
-    @profiled
     def _lookup_capability(self, claim_label):
         cap_lookup_key = get_capability_lookup_key(
                 self._params.dh.pk, self._nonce, claim_label)
@@ -182,7 +182,6 @@ class View(object):
         return decode_capability(self._params.dh.pk, self._nonce,
                                  claim_label, cap)
 
-    @profiled
     def _lookup_claim(self, claim_label, vrf_value, claim_lookup_key):
         # TODO: There are no integrity checks here
         try:
