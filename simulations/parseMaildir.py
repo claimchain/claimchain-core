@@ -115,10 +115,7 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
     seen_msgs = []  # Create list to detect duplicate messages
 
     for username in os.listdir(root_folder):
-        logging.info("Parsing user: %s", username)
-        # check that this user was not already parsed
-        if os.path.exists(parsed_folder + username + '.txt'):
-            logging.debug("User %s was already parsed", username)
+        logging.info("Parsing sent folders of user: %s", username)
 
         rset = set([]) # Create relationship set for user
         from_headers_list = []
@@ -126,11 +123,11 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
         sent_folders = [folder for folder in os.listdir(root_folder + username) if
                        'sent' in folder]  # Only process files with sent messages
 
-        '''
-        Uncomment for ignoring users who don't have a Sent directory, or have less than 20 sent messages
         if len(sent_folders) == 0:
             continue
-        
+
+        '''
+        Uncomment for ignoring users who don't have a Sent directory, or have less than 20 sent messages  
         counter = 0
         for folder in sent_folders:
             counter += len(os.listdir(root_folder+'/'+user_folder+'/'+folder))
@@ -183,6 +180,9 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
 
         from_headers_set = set(from_headers_list)
 
+        if len(from_headers_set) == 0:
+            logging.info("User %s had no sent emails" % (username))
+            continue;
         if len(from_headers_set) > 1:
             logging.info("User %s is using multiple From headers:%s" % (username, from_headers_set))
 
@@ -192,8 +192,12 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
         social[most_used_from_header] = {'user': username, 'friends': rset, 'num_of_friends': len(rset),
                                          'from_headers_set': from_headers_set}
 
+    for username in os.listdir(root_folder):
+        logging.info("Parsing inbox folders of user: %s", username)
+
         received_folders = [folder for folder in os.listdir(root_folder + username) if
                        'sent' not in folder]  # Parse emails in other directories
+
         for folder in received_folders:
             for dirpath, _, filenames in os.walk(root_folder + username + '/' + folder):
                 for filename in filenames:
