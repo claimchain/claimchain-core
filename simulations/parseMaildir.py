@@ -236,7 +236,8 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
 def main():
     _, _, cnt_msgs, cnt_msgs_no_recipients, cnt_msgs_dup, cnt_msgs_invalid = process_enron()
     print("Parsed %s messages, discarded %s because they had no valid recipient email address, %s because they were"
-          "duplicate, and %s because they could not be parsed." % (cnt_msgs, cnt_msgs_no_recipients, cnt_msgs_invalid))
+          "duplicate, and %s because they could not be parsed."
+          % (cnt_msgs, cnt_msgs_no_recipients, cnt_msgs_dup, cnt_msgs_invalid))
 
 
 if __name__ == "__main__":
