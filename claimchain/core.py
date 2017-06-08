@@ -4,7 +4,7 @@ from petlib.pack import encode, decode
 
 from .crypto import compute_vrf, verify_vrf, VrfContainer
 from .crypto import PublicParams, LocalParams
-from .utils import ensure_binary
+from .utils import ensure_binary, profiled
 
 
 def _compute_claim_key(vrf_value, mode='enc'):
@@ -45,6 +45,7 @@ def get_capability_lookup_key(owner_dh_pk, nonce, claim_label):
             nonce, shared_secret, claim_label, mode='lookup')
 
 
+@profiled
 def encode_claim(nonce, claim_label, claim_content):
     claim_label = ensure_binary(claim_label)
     claim_content = ensure_binary(claim_content)
@@ -63,6 +64,7 @@ def encode_claim(nonce, claim_label, claim_content):
     return (vrf.value, lookup_key, enc_claim)
 
 
+@profiled
 def decode_claim(owner_vrf_pk, nonce, claim_label, vrf_value, encrypted_claim):
     claim_label = ensure_binary(claim_label)
 
@@ -84,6 +86,7 @@ def decode_claim(owner_vrf_pk, nonce, claim_label, vrf_value, encrypted_claim):
     return claim_content
 
 
+@profiled
 def encode_capability(reader_dh_pk, nonce, claim_label, vrf_value):
     claim_label = ensure_binary(claim_label)
     pp = PublicParams.get_default()

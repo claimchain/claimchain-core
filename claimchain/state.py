@@ -16,7 +16,7 @@ from .core import encode_claim, decode_claim
 from .crypto import PublicParams, LocalParams
 from .crypto import sign, verify_signature
 from .utils import bytes2ascii, ascii2bytes, pet2ascii, ascii2pet
-from .utils import VerifiableMap
+from .utils import VerifiableMap, profiled
 
 
 PROTOCOL_VERSION = 1
@@ -61,8 +61,9 @@ def _encode_capabilities(nonce, caps_by_reader_pk, vrf_value_by_label):
             try:
                 vrf_value = vrf_value_by_label[claim_label]
             except KeyError:
-                warning.warn("VRF for %s not computed. Ignoring capability." \
-                             % claim_label)
+                warnings.warn("VRF for %s not computed. "
+                              "Skipping adding a capability." \
+                              % claim_label)
                 break
             lookup_key, enc_cap = encode_capability(
                     reader_dh_pk, nonce, claim_label, vrf_value)
@@ -70,6 +71,7 @@ def _encode_capabilities(nonce, caps_by_reader_pk, vrf_value_by_label):
     return enc_items_map
 
 
+@profiled
 def _build_tree(store, enc_items_map):
     tree = Tree(store)
     vm = VerifiableMap(tree)
@@ -166,6 +168,7 @@ class View(object):
             raise ValueError("Invalid signature.")
         self._block.aux = raw_sig_backup
 
+    @profiled
     def _lookup_capability(self, claim_label):
         cap_lookup_key = get_capability_lookup_key(
                 self._params.dh.pk, self._nonce, claim_label)
@@ -179,6 +182,7 @@ class View(object):
         return decode_capability(self._params.dh.pk, self._nonce,
                                  claim_label, cap)
 
+    @profiled
     def _lookup_claim(self, claim_label, vrf_value, claim_lookup_key):
         # TODO: There are no integrity checks here
         try:
