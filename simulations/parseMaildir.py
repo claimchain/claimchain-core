@@ -34,20 +34,21 @@ def parse_mail(dirpath, filename):
     except:
         raise Exception("Could not decode email, will discard")
 
-    # Ignore duplicate messages
-    try:
-        aux_string = msg_content['Message-ID']
-        mID = int(hashlib.sha1(aux_string.lower().encode('utf-8')).hexdigest(), 16)
-    except:
-        raise Exception("Found email without mID")
-
     # time
     try:
         mtime = time.mktime(email.utils.parsedate(msg_content['date']))
     except:
         mtime = 'there is no date'
-        logging.info("found email without date, will ignore")
+        logging.info("Found email without date, will ignore")
         return
+
+    # Ignore duplicate messages
+    try:
+        #aux_string = msg_content['Message-ID']
+        aux_string = str(mtime) + msg_content['From']
+        mID = int(hashlib.sha1(aux_string.lower().encode('utf-8')).hexdigest(), 16)
+    except:
+        raise Exception("Found email without mID")
 
     mail = Message(msg_content['From'], mtime, set(), set(), set())
 
@@ -114,7 +115,7 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
     seen_msgs = []  # Create list to detect duplicate messages
 
     for username in os.listdir(root_folder):
-        logging.debug("Parsing user: %s", username)
+        logging.info("Parsing user: %s", username)
         # check that this user was not already parsed
         if os.path.exists(parsed_folder + username + '.txt'):
             logging.debug("User %s was already parsed", username)
@@ -141,8 +142,9 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
         for folder in sent_folders:
             for dirpath, _, filenames in os.walk(root_folder + username + '/' + folder):
                 for filename in filenames:
+                    cnt_msgs += 1 # Increment the message counter
                     if cnt_msgs % 1000 == 0:
-                        logging.debug('Parsing message %d', cnt_msgs)
+                        logging.info('Parsing message %d', cnt_msgs)
 
                     try:
                         mail, mID = parse_mail(dirpath, filename)
@@ -151,12 +153,11 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
                         continue
 
                     if mID in seen_msgs:
-                        logging.info("Found duplicate email")
+                        logging.debug("Found duplicate email")
                         cnt_msgs_dup += 1
                         continue
 
                     seen_msgs += [mID]  # Update the list of duplicates
-                    cnt_msgs += 1 # Increment the message counter
 
                     # Compose a unique set with the public recipients of this mail
                     tSet = mail.To | mail.Cc
@@ -165,7 +166,7 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
 
                     if len(tSet) == 0:
                         cnt_msgs_no_recipients += 1
-                        logging.debug("found email without public name@domain.xz recipients")
+                        logging.debug("Found email without public name@domain.xz recipients")
                         continue
 
                     # Increment the counter of emails with the same number of public recipients
@@ -181,6 +182,7 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
                     mail_list.append(mail)
 
         from_headers_set = set(from_headers_list)
+
         if len(from_headers_set) > 1:
             logging.info("User %s is using multiple From headers:%s" % (username, from_headers_set))
 
@@ -195,8 +197,9 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
         for folder in received_folders:
             for dirpath, _, filenames in os.walk(root_folder + username + '/' + folder):
                 for filename in filenames:
+                    cnt_msgs += 1  # Increment the message counter
                     if cnt_msgs % 1000 == 0:
-                        logging.debug('Parsing message %d', cnt_msgs)
+                        logging.info('Parsing message %d', cnt_msgs)
 
                     try:
                         mail, mID = parse_mail(dirpath, filename)
@@ -206,12 +209,11 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
                         continue
 
                     if mID in seen_msgs:
-                        logging.info("Found duplicate email")
+                        logging.debug("Found duplicate email")
                         cnt_msgs_dup += 1
                         continue
 
                     seen_msgs += [mID]  # Update the list of duplicates
-                    cnt_msgs += 1  # Increment the message counter
 
                     mail_list.append(mail)
 
@@ -224,13 +226,13 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
     pickle.dump(recipients_per_email, open(parsed_folder + "recipients.pkl", "wb"))
     pickle.dump(mail_list, open(parsed_folder + "replay_log.pkl", "wb"))
 
-    return social, recipients_per_email, cnt_msgs, cnt_msgs_no_recipients
+    return social, recipients_per_email, cnt_msgs, cnt_msgs_no_recipients, cnt_msgs_dup, cnt_msgs_invalid
 
 
 def main():
-    _, _, cnt_msgs, cnt_msgs_no_recipients = process_enron()
-    print("Parsed %s messages, discarded %s because they had no valid recipient email address."
-           % (cnt_msgs, cnt_msgs_no_recipients))
+    _, _, cnt_msgs, cnt_msgs_no_recipients, cnt_msgs_dup, cnt_msgs_invalid = process_enron()
+    print("Parsed %s messages, discarded %s because they had no valid recipient email address, %s because they were"
+          "duplicate, and %s because they could not be parsed." % (cnt_msgs, cnt_msgs_no_recipients, cnt_msgs_invalid))
 
 
 if __name__ == "__main__":
