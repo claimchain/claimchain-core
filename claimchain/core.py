@@ -104,6 +104,7 @@ def encode_capability(reader_dh_pk, nonce, claim_label, vrf_value):
     return lookup_key, encode([enc_body, tag])
 
 
+@profiled
 def decode_capability(owner_dh_pk, nonce, claim_label, encrypted_capability):
     pp = PublicParams.get_default()
     cipher = pp.enc_cipher
