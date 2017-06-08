@@ -44,6 +44,10 @@ def generate_test_data(nb_friends=200, nb_per_friend=5):
     return friends_graph, all_data
 
 
+import pytest
+
+
+@pytest.mark.skip
 def test_e2e_timings():
     friends_graph, all_data = generate_test_data()
     (labels, heads, pubkeys, privkeys) = all_data
