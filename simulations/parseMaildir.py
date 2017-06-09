@@ -13,7 +13,7 @@ import logging
 logging.basicConfig(level=logging.INFO)  # Set to .DEBUG for gory details
 
 # Regex for emails
-email_pattern = re.compile('[^imceanotes][a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
+email_pattern = re.compile('^(?!imceanotes)[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
 
 
 class Message:
@@ -38,7 +38,6 @@ def parse_mail(dirpath, filename):
     try:
         mtime = time.mktime(email.utils.parsedate(msg_content['date']))
     except:
-        mtime = 'there is no date'
         logging.info("Found email without date, will ignore")
         return
 
@@ -50,7 +49,11 @@ def parse_mail(dirpath, filename):
     except:
         raise Exception("Found email without mID")
 
-    mail = Message(msg_content['From'], mtime, set(), set(), set())
+    try:
+        mail = Message(msg_content['From'], mtime, set(), set(), set())
+        mail.From = email_pattern.match(mail.From).group(0)
+    except:
+        raise Exception('Could not parse From header')
 
     # receiversID
     # To and X-to field
@@ -58,7 +61,7 @@ def parse_mail(dirpath, filename):
     try:
         field = email_pattern.findall(field)
         for e in field:
-            mail.To.add(e.lower())
+            mail.To.add(e.strip(' \t\n\r<>').lower())
     except:
         pass
 
@@ -67,7 +70,7 @@ def parse_mail(dirpath, filename):
     try:
         field = email_pattern.findall(field)
         for e in field:
-            mail.Cc.add(e.lower())
+            mail.Cc.add(e.strip(' \t\n\r<>').lower())
     except:
         pass
 
@@ -76,7 +79,7 @@ def parse_mail(dirpath, filename):
     try:
         field = email_pattern.findall(field)
         for e in field:
-            mail.Bcc.add(e.lower())
+            mail.Bcc.add(e.strip(' \t\n\r<>').lower())
     except:
         pass
 
@@ -109,7 +112,7 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
     cnt_msgs_dup = 0
 
     social = {}
-    recipients_per_email = {}
+    emails_per_num_of_recipients = {}
 
     mail_list = []
     seen_msgs = []  # Create list to detect duplicate messages
@@ -167,10 +170,10 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
                         continue
 
                     # Increment the counter of emails with the same number of public recipients
-                    if len(tSet) not in recipients_per_email:
-                        recipients_per_email[len(tSet)] = 1
+                    if len(tSet) not in emails_per_num_of_recipients:
+                        emails_per_num_of_recipients[len(tSet)] = 1
                     else:
-                        recipients_per_email[len(tSet)] += 1
+                        emails_per_num_of_recipients[len(tSet)] += 1
 
                     # Add the public recipients of this email to the relationship set of the user
                     rset |= tSet
@@ -227,15 +230,15 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
     mail_list.sort(key=lambda x: x.mtime)
 
     pickle.dump(social, open(parsed_folder + "social.pkl", "wb"))
-    pickle.dump(recipients_per_email, open(parsed_folder + "recipients.pkl", "wb"))
+    pickle.dump(emails_per_num_of_recipients, open(parsed_folder + "recipients.pkl", "wb"))
     pickle.dump(mail_list, open(parsed_folder + "replay_log.pkl", "wb"))
 
-    return social, recipients_per_email, cnt_msgs, cnt_msgs_no_recipients, cnt_msgs_dup, cnt_msgs_invalid
+    return social, emails_per_num_of_recipients, cnt_msgs, cnt_msgs_no_recipients, cnt_msgs_dup, cnt_msgs_invalid
 
 
 def main():
     _, _, cnt_msgs, cnt_msgs_no_recipients, cnt_msgs_dup, cnt_msgs_invalid = process_enron()
-    print("Parsed %s messages, discarded %s because they had no valid recipient email address, %s because they were"
+    print("Parsed %s messages, discarded %s because they had no valid recipient email address, %s because they were "
           "duplicate, and %s because they could not be parsed."
           % (cnt_msgs, cnt_msgs_no_recipients, cnt_msgs_dup, cnt_msgs_invalid))
 
