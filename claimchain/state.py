@@ -16,7 +16,8 @@ from .core import encode_claim, decode_claim
 from .crypto import PublicParams, LocalParams
 from .crypto import sign, verify_signature
 from .utils import bytes2ascii, ascii2bytes, pet2ascii, ascii2pet
-from .utils import VerifiableMap, profiled
+from .utils import profiled
+from .utils import Tree, Blob, ObjectStore
 
 
 PROTOCOL_VERSION = 1
@@ -34,7 +35,7 @@ class Payload(object):
     def build(tree, nonce=None):
         return Payload(nonce=bytes2ascii(nonce),
                        metadata=LocalParams.get_default().public_export(),
-                       mtr_hash=bytes2ascii(tree.root()))
+                       mtr_hash=bytes2ascii(tree.root_hash))
     @staticmethod
     def from_dict(exported):
         return Payload(**exported)
@@ -45,10 +46,9 @@ class Payload(object):
 
 @profiled
 def _build_tree(store, enc_items_map):
-    tree = Tree(store)
-    vm = VerifiableMap(tree)
+    tree = Tree(ObjectStore(store))
     for lookup_key, enc_item in enc_items_map.items():
-        vm[lookup_key] = enc_item
+        tree[lookup_key] = Blob(enc_item)
     return tree
 
 
@@ -152,9 +152,9 @@ class View(object):
         self._nonce = ascii2bytes(payload.nonce)
         self._params = LocalParams.from_dict(payload.metadata)
 
-        tree = Tree(store=self._chain.store,
-                    root_hash=ascii2bytes(payload.mtr_hash))
-        self._map = VerifiableMap(tree)
+        self.tree = Tree(
+                object_store=ObjectStore(self._chain.store),
+                root_hash=ascii2bytes(payload.mtr_hash))
 
         self.validate()
 
@@ -175,7 +175,7 @@ class View(object):
 
         # TODO: There are no integrity checks here
         try:
-            cap = self._map[cap_lookup_key]
+            cap = self.tree[cap_lookup_key]
         except KeyError:
             raise KeyError("Label does not exist or you don't have "
                            "permission to read.")
@@ -185,7 +185,7 @@ class View(object):
     def _lookup_claim(self, claim_label, vrf_value, claim_lookup_key):
         # TODO: There are no integrity checks here
         try:
-            enc_claim = self._map[claim_lookup_key]
+            enc_claim = self.tree[claim_lookup_key]
         except KeyError:
             raise KeyError("Claim not found, but permission to read the label "
                            "exists.")

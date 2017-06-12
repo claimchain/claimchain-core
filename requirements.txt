@@ -4,4 +4,5 @@ petlib
 pyyaml
 attrs
 base58
+statistics
 defaultcontext
