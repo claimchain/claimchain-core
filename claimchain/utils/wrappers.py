@@ -4,6 +4,10 @@ from hippiehug.Utils import binary_hash
 from .encodings import ensure_binary
 
 
+# TODO: Move to hippiehug 1.0
+# TODO: Move the tests out of doctests
+
+
 class Blob(bytes):
     @property
     def hid(self):
@@ -42,6 +46,41 @@ class ObjectStore(object):
         self.backend[lookup_key] = value
 
 
+# TODO: (Higher priority) move this to hippiehug classes themselves
+def serialize_object(obj):
+    """
+    Serialize blobs, hippiehug tree nodes, and hippiehug chain blocks
+
+    >>> block = hippiehug.Block([])
+    >>> len(serialize_object(block))
+    4
+    >>> node = hippiehug.Nodes.Branch(b'pivot', b'left', b'right')
+    >>> len(serialize_object(node))
+    3
+    >>> leaf = hippiehug.Nodes.Leaf(b'item', b'key')
+    >>> len(serialize_object(leaf))
+    2
+    >>> blob = Blob(b'content')
+    >>> serialize_object(blob) == blob
+    True
+
+    .. warning::
+
+    There is no guarantee this is in sync with hippiehug, i.e., this
+    is the serialization hippiehug employs internally. This will eventually
+    move inside the hippiehug library.
+
+    """
+    if isinstance(obj, hippiehug.Nodes.Leaf):
+        return (obj.key, obj.item)
+    elif isinstance(obj, hippiehug.Nodes.Branch):
+        return (obj.pivot, obj.left_branch, obj.right_branch)
+    elif isinstance(obj, hippiehug.Block):
+        return (obj.index, obj.fingers, obj.items, obj.aux)
+    elif isinstance(obj, Blob):
+        return obj
+
+
 class Chain(object):
     def __init__(self, object_store=None):
         self.object_store = object_store or ObjectStore()
@@ -52,16 +91,40 @@ class Tree(object):
     Wrapper to enable map interface on top of Hippiehug trees
 
     >>> tree = Tree()
+    >>> b'label' in tree
+    False
+    >>> tree[b'label']
+    Traceback (most recent call last):
+    KeyError: b'label'
     >>> tree[b'label'] = Blob(b'test')
     >>> tree[b'label']
     b'test'
     >>> b'label' in tree
     True
+
+    Creating a tree from existing storage:
+
     >>> tree1 = Tree(tree.object_store, root_hash=tree.root_hash)
     >>> b'label' in tree1
     True
     >>> tree.evidence(b'label') is not None
     True
+
+    Adding multiple items at once:
+
+    >>> b'label1' in tree
+    False
+    >>> b'label2' in tree
+    False
+    >>> tree.update({'label1': Blob(b'test1'), 'label2': Blob(b'test2')})
+    >>> b'label1' in tree
+    True
+    >>> b'label2' in tree
+    True
+    >>> tree[b'label1']
+    b'test1'
+    >>> tree[b'label2']
+    b'test2'
     """
     def __init__(self, object_store=None, root_hash=None):
         self.object_store = object_store
@@ -75,30 +138,64 @@ class Tree(object):
 
     def __getitem__(self, lookup_key):
         lookup_key = ensure_binary(lookup_key)
-
-        _, evidence = self.tree.evidence(key=lookup_key)
-        value_hash = evidence[-1].item
-        if evidence[-1].key != lookup_key:
+        _, evidence = self.evidence(lookup_key)
+        if not evidence or evidence[-1].key != lookup_key:
             raise KeyError(lookup_key)
+        value_hash = evidence[-1].item
         return self.tree.store[value_hash]
 
     def __setitem__(self, lookup_key, value):
+        """
+        Add value with given lookup key.
+
+        TODO: Add transactions. If this fails or stops at some point,
+        storage will be left in a screwed up state.
+
+        :param value: An object with ``hid`` property (e.g. ``Blob`` object)
+        """
         lookup_key = ensure_binary(lookup_key)
         if not hasattr(value, 'hid'):
             raise TypeError('Value is not a valid object.')
 
         self.tree.add(key=lookup_key, item=value)
-        _, evidence = self.tree.evidence(key=lookup_key)
+        _, evidence = self.evidence(lookup_key)
         assert self.tree.is_in(value, key=lookup_key)
         value_hash = evidence[-1].item
+
+        # This should only happen if hashing here and in hippiehug
+        # become inconsistent because of internal changes in hippiehug
+        # TODO: Remove when hashing when changes here are moved to
+        # hippiehug
         assert value_hash == value.hid
+
         self.tree.store[value_hash] = value
+
+    def update(self, items):
+        """
+        Add multiple values.
+
+        TODO: Add transactions. If this fails or stops at some point,
+        storage will be left in a screwed up state.
+
+        :param items: dictionary, where the values are objects with
+                      ``hid`` property (e.g. ``Blob`` objects)
+        """
+        items = {ensure_binary(key): value for key, value in items.items()}
+        for value in items.values():
+            if not hasattr(value, 'hid'):
+                raise TypeError('Value is not a valid object.')
+            self.tree.store[value.hid] = value
+
+        self.tree.multi_add(list(items.values()), list(items.keys()))
 
     def __contains__(self, lookup_key):
         lookup_key = ensure_binary(lookup_key)
-        _, evidence = self.tree.evidence(key=lookup_key)
-        leaf = evidence[-1]
-        return leaf.key == lookup_key
+        _, evidence = self.evidence(lookup_key)
+        return evidence != [] and evidence[-1].key == lookup_key
 
     def evidence(self, lookup_key):
-        return self.tree.evidence(key=lookup_key)
+        result = self.tree.evidence(key=lookup_key)
+        if not result:
+            result = None, []
+        return result
+

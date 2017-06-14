@@ -47,8 +47,10 @@ class Payload(object):
 @profiled
 def _build_tree(store, enc_items_map):
     tree = Tree(ObjectStore(store))
-    for lookup_key, enc_item in enc_items_map.items():
-        tree[lookup_key] = Blob(enc_item)
+    enc_blob_map = {key: Blob(enc_item)
+                    for key, enc_item in enc_items_map.items()
+                    if not isinstance(enc_item, Blob)}
+    tree.update(enc_blob_map)
     return tree
 
 
