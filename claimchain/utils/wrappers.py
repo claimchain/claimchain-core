@@ -199,3 +199,18 @@ class Tree(object):
             result = None, []
         return result
 
+
+def check_evidence(root_hash, evidence, lookup_key):
+    """
+    >>> tree = Tree()
+    >>> tree[b'label'] = Blob(b'test')
+    >>> root_hash, evidence = tree.evidence(b'label')
+    >>> check_evidence(root_hash, evidence, b'label')
+    True
+    >>> check_evidence(root_hash, evidence, b'label1')
+    False
+    """
+    lookup_key = ensure_binary(lookup_key)
+    store = {node.identity(): node for node in evidence}
+    tree = Tree(store, root_hash=root_hash)
+    return lookup_key in tree

@@ -174,8 +174,6 @@ class View(object):
     def _lookup_capability(self, claim_label):
         cap_lookup_key = get_capability_lookup_key(
                 self._params.dh.pk, self._nonce, claim_label)
-
-        # TODO: There are no integrity checks here
         try:
             cap = self.tree[cap_lookup_key]
         except KeyError:
@@ -185,7 +183,6 @@ class View(object):
                                  claim_label, cap)
 
     def _lookup_claim(self, claim_label, vrf_value, claim_lookup_key):
-        # TODO: There are no integrity checks here
         try:
             enc_claim = self.tree[claim_lookup_key]
         except KeyError:
