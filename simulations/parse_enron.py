@@ -120,7 +120,7 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
     for username in os.listdir(root_folder):
         logging.info("Parsing sent folders of user: %s", username)
 
-        rset = set([]) # Create relationship set for user
+        r_set = set([]) # Create relationship set for user
         from_headers_list = []
 
         sent_folders = [folder for folder in os.listdir(root_folder + username) if
@@ -160,23 +160,23 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
                     seen_msgs += [mID]  # Update the list of duplicates
 
                     # Compose a unique set with the public recipients of this mail
-                    tSet = mail.To | mail.Cc
+                    t_set = mail.To | mail.Cc | mail.Bcc
 
                     from_headers_list.append(mail.From)
 
-                    if len(tSet) == 0:
+                    if len(t_set) == 0:
                         cnt_msgs_no_recipients += 1
                         logging.debug("Found email without public name@domain.xz recipients")
                         continue
 
                     # Increment the counter of emails with the same number of public recipients
-                    if len(tSet) not in emails_per_num_of_recipients:
-                        emails_per_num_of_recipients[len(tSet)] = 1
+                    if len(t_set) not in emails_per_num_of_recipients:
+                        emails_per_num_of_recipients[len(t_set)] = 1
                     else:
-                        emails_per_num_of_recipients[len(tSet)] += 1
+                        emails_per_num_of_recipients[len(t_set)] += 1
 
                     # Add the public recipients of this email to the relationship set of the user
-                    rset |= tSet
+                    r_set |= t_set
 
                     # Append the email to
                     mail_list.append(mail)
@@ -192,7 +192,7 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
         most_used_from_header = max(from_headers_set, key=from_headers_list.count)
 
         # Log the social graph of the user
-        social[most_used_from_header] = {'user': username, 'friends': rset, 'num_of_friends': len(rset),
+        social[most_used_from_header] = {'user': username, 'friends': r_set, 'num_of_friends': len(r_set),
                                          'from_headers_set': from_headers_set}
 
     for username in os.listdir(root_folder):
