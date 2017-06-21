@@ -7,8 +7,10 @@ import os
 import re
 import time
 import pickle
-
 import logging
+
+from attr import attrs, attrib
+
 
 logging.basicConfig(level=logging.INFO)  # Set to .DEBUG for gory details
 
@@ -16,13 +18,17 @@ logging.basicConfig(level=logging.INFO)  # Set to .DEBUG for gory details
 email_pattern = re.compile('^(?!imceanotes)[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
 
 
+@attrs
 class Message:
-    def __init__(self, From, mtime, To, Cc, Bcc):
-        self.From = From
-        self.mtime = mtime
-        self.To = To
-        self.Cc = Cc
-        self.Bcc = Bcc
+    '''Class to keep sender, timestamp, public (To/Cc) and hidden (Bcc) recipients of a message
+
+    Must map the Message class fields in parseMaildir.py for deserialization purposes
+    '''
+    From = attrib()
+    mtime = attrib()
+    To = attrib()
+    Cc = attrib()
+    Bcc = attrib()
 
 
 def parse_mail(dirpath, filename):
@@ -130,7 +136,7 @@ def process_enron(root_folder="Enron/maildir/", parsed_folder="Enron/parsing/"):
             continue
 
         '''
-        Uncomment for ignoring users who don't have a Sent directory, or have less than 20 sent messages  
+        Uncomment for ignoring users who don't have a Sent directory, or have less than 20 sent messages
         counter = 0
         for folder in sent_folders:
             counter += len(os.listdir(root_folder+'/'+user_folder+'/'+folder))
