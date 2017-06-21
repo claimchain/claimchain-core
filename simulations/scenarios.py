@@ -1,19 +1,10 @@
 import pickle
-import logging
 
 import numpy as np
 import pandas as pd
 
 from attr import attrs, attrib
 
-
-logging.basicConfig(level=logging.DEBUG)
-
-
-
-parsed_logs_folder = 'Enron/parsing/'
-social_graph = pickle.load(open(parsed_logs_folder + "social.pkl", "rb"))
-log = pickle.load(open(parsed_logs_folder + "replay_log.pkl", "rb"))
 
 enc_status = {"plaintext": 0, "stale": 1, "encrypted": 2}
 email_status = {"stat_autocrypt": [], "stat_pub_claimchain": [], "stat_priv_claimchain": [], "dyn_autocrypt": [], "dyn_pub_claimchain": [], "dyn_priv_claimchain": []}
