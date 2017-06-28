@@ -15,7 +15,7 @@ from attr import attrs, attrib
 logging.basicConfig(level=logging.INFO)  # Set to .DEBUG for gory details
 
 # Regex for emails
-email_pattern = re.compile('^(?!imceanotes)[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
+email_pattern = re.compile('[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}')
 
 
 @attrs
@@ -67,6 +67,8 @@ def parse_mail(dirpath, filename):
     try:
         field = email_pattern.findall(field)
         for e in field:
+            if e.startswith("imceanotes"):
+                continue
             mail.To.add(e.strip(' \t\n\r<>').lower())
     except:
         pass
@@ -76,6 +78,8 @@ def parse_mail(dirpath, filename):
     try:
         field = email_pattern.findall(field)
         for e in field:
+            if e.startswith("imceanotes"):
+                continue
             mail.Cc.add(e.strip(' \t\n\r<>').lower())
     except:
         pass
@@ -85,6 +89,8 @@ def parse_mail(dirpath, filename):
     try:
         field = email_pattern.findall(field)
         for e in field:
+            if e.startswith("imceanotes"):
+                continue
             mail.Bcc.add(e.strip(' \t\n\r<>').lower())
     except:
         pass
