@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 from attr import Factory, attrs, attrib, evolve as clone
+from defaultcontext import with_default_context
 
 from .parse_enron import Message
 
@@ -20,6 +21,7 @@ class EncStatus(Enum):
     encrypted = 2
 
 
+@with_default_context
 @attrs
 class SimulationParams(object):
     # One of 'dummy', 'real_code'
@@ -35,11 +37,9 @@ class SimulationParams(object):
 
 
 class Context(object):
-    def __init__(self, log, social_graph, params=None):
+    def __init__(self, log, social_graph):
         self.log = log
         self.social_graph = social_graph
-
-        self.params = params or SimulationParams()
 
         # Set of the dataset users we know the full social graph for
         self.userset = set(self.social_graph.keys())
@@ -156,22 +156,21 @@ class GlobalState(object):
 
             # If sender does not know of a recipient's enc key, the email is
             # sent in clear text
-            if (view is None or view.key is None) and user in self.context.userset:
-                self.encrypted_email_count -= 1
-                status = EncStatus.plaintext
-                break
+            if (view is None or view.key is None):
+                if user in self.context.userset:
+                    self.encrypted_email_count -= 1
+                    status = EncStatus.plaintext
 
-            if recipient in self.context.senders and \
-               self.local_views[(user, recipient)].key != self.state_by_user[recipient].key:
+            elif recipient in self.context.senders and \
+                 view.key != self.state_by_user[recipient].key:
                 status = EncStatus.stale
-                # TODO: Why should we count stale case as encrypted?
                 # TODO: Why no break here?
                 # break
 
         return status
 
     def maybe_update_chain(self, user, force=False):
-        min_buffer_size = self.context.params.chain_update_buffer_size
+        min_buffer_size = SimulationParams.get_default().chain_update_buffer_size
 
         if force or (min_buffer_size is not None \
                      and len(self.claim_buffer_by_user[user]) > min_buffer_size):
@@ -186,7 +185,7 @@ class GlobalState(object):
         return False
 
     def maybe_update_key(self, user, force=False):
-        min_nb_sent_emails = self.context.params.key_update_every_nb_sent_emails
+        min_nb_sent_emails = SimulationParams.get_default().key_update_every_nb_sent_emails
 
         if force or (min_nb_sent_emails is not None and \
                      self.nb_sent_emails_by_user[user] > min_nb_sent_emails):
@@ -218,7 +217,7 @@ def simulate_autocrypt(context):
     * Public and private recipients learn of the sender's latest key
     '''
     print("Simulating Autocrypt:")
-    print(context.params)
+    print(SimulationParams.get_default())
 
     global_state = create_global_state(context)
 
@@ -260,7 +259,7 @@ def simulate_claimchain_no_privacy(context):
         * Public and private recipients learn of the latest head of the friends of the sender
     '''
     print("Simulating the ClaimChain with public claims:")
-    print(context.params)
+    print(SimulationParams.get_default())
 
     global_state = create_global_state(context)
 
@@ -279,7 +278,7 @@ def simulate_claimchain_no_privacy(context):
 
         # For all recipients, update their local dict entry for the sender
         sender_state = global_state.state_by_user[email.From]
-        for recipient in recipients.intersection(context.userset):
+        for recipient in recipients.intersection(context.senders):
 
             # If recipient hasn't heard about sender, create view
             # TODO: Why not in global state initialization?
@@ -300,7 +299,6 @@ def simulate_claimchain_no_privacy(context):
                     continue
 
                 if (recipient, friend) not in global_state.local_views:
-                    # TODO: Why not in global state initialization?
                     global_state.create_local_view(recipient, friend)
 
                 recipient_view_of_friend = global_state.local_views[(recipient, friend)]
@@ -335,7 +333,7 @@ def simulate_claimchain_with_privacy(context):
         * Recipients learn of the latest head of the friends of the sender that have the capability to access
     '''
     print("Simulating ClaimChain with private claims and introductions:")
-    print(context.params)
+    print(SimulationParams.get_default())
 
     global_state = create_global_state(context)
     introductions = {}
@@ -356,10 +354,9 @@ def simulate_claimchain_with_privacy(context):
 
         # For all recipients, update their local dict entry for the sender
         sender_state = global_state.state_by_user[email.From]
-        for recipient in recipients.intersection(context.userset):
+        for recipient in recipients.intersection(context.senders):
 
             # If recipient hasn't heard about sender, create view
-            # TODO: Why not in global state initialization?
             if (recipient, email.From) not in global_state.local_views:
                 global_state.create_local_view(recipient, email.From)
 
@@ -389,7 +386,6 @@ def simulate_claimchain_with_privacy(context):
                     continue
 
                 if (recipient, friend) not in global_state.local_views:
-                    # TODO: Why not in global state initialization?
                     global_state.create_local_view(recipient, friend)
 
                 recipient_view_of_friend = global_state.local_views[(recipient, friend)]
