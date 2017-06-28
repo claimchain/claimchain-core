@@ -81,3 +81,19 @@ def test_claimchain_no_privacy_propagation(log, social_graph, params,
 
     nb_stale_heads = np.sum(hp['Stale'])
     assert nb_stale_heads > 0
+
+
+@pytest.mark.parametrize('params,any_stale_keys', [
+        (SimulationParams(chain_update_buffer_size=10, key_update_every_nb_sent_emails=None), False),
+        (SimulationParams(chain_update_buffer_size=10, key_update_every_nb_sent_emails=5), True)
+    ])
+def test_claimchain_with_privacy_propagation(log, social_graph, params,
+                                             any_stale_keys):
+    context = Context(log, social_graph, params)
+    kp, hp, es = simulate_claimchain_with_privacy(context)
+
+    nb_stale_keys = np.sum(kp['Stale'])
+    assert (nb_stale_keys > 0) == any_stale_keys
+
+    nb_stale_heads = np.sum(hp['Stale'])
+    assert nb_stale_heads > 0

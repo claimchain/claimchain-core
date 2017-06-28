@@ -308,7 +308,7 @@ def simulate_claimchain_no_privacy(context):
 
                 if recipient_view_of_friend.head != sender_public_view_of_friend.head:
                     recipient_view_of_friend.update_from_view(sender_public_view_of_friend)
-                    global_state.claim_buffer_by_user[recipient][email.From] = sender_public_view_of_friend
+                    global_state.claim_buffer_by_user[recipient][friend] = sender_public_view_of_friend
 
         if index % 100 == 0:
             key_propagation_data.loc[index] = global_state.eval_propagation(mode='key')
@@ -327,46 +327,51 @@ def simulate_claimchain_no_privacy(context):
     return key_propagation_data, head_propagation_data, encryption_status_data
 
 
-def simulate_static_claimchain_with_privacy(social_graph, log):
-    '''Simulate the static view of ClaimChain with support for private claims (introduction mode)
+def simulate_claimchain_with_privacy(context):
+    '''Simulate ClaimChain with support for private claims (introduction mode)
 
         * Public and private recipients learn of the sender's latest head
         * Sender grants access to public and private recipients to read the entries of public recipients in her ClaimChain
         * Recipients learn of the latest head of the friends of the sender that have the capability to access
     '''
-    print("Simulating the static view scenario of ClaimChain with private claims and introductions:")
+    print("Simulating ClaimChain with private claims and introductions:")
+    print(context.params)
 
-    userset, local_dict, public_dict, claim_buffer_by_user = prep_static_view(log, social_graph)
+    global_state = create_global_state(context)
     introductions = {}
-
-    enc_userset_emails = 0
-    sent_userset_emails = 0
 
     key_propagation_data = pd.DataFrame(columns=('Updated', 'Stale', 'Not updated'))
     head_propagation_data = pd.DataFrame(columns=('Updated', 'Stale', 'Not updated'))
+    encryption_status_data = pd.Series()
 
-    for index, email in enumerate(log):
+    for index, email in enumerate(context.log):
         public_recipients = email.To | email.Cc - {email.From}
         recipients = public_recipients | email.Bcc - {email.From}
 
-        e_status, sent_userset_emails, enc_userset_emails = update_enc_email_status_cnt(email.From, userset, recipients, local_dict, sent_userset_emails, enc_userset_emails)
-        email_status["stat_priv_claimchain"].append(e_status)
+        global_state.maybe_update_key(email.From)
+        global_state.maybe_update_chain(email.From)
 
-        claim_buffer_by_user, local_dict, public_dict = append_block_policy(claim_buffer_by_user, email.From, local_dict, public_dict)
+        encryption_status = global_state.record_sent_email(email.From, recipients)
+        encryption_status_data.loc[index] = encryption_status
 
         # For all recipients, update their local dict entry for the sender
-        for recipient in recipients:
-            if recipient not in claim_buffer_by_user:
-                continue
-            if ( (recipient, email.From) not in local_dict or
-                 local_dict[(recipient, email.From)][0] < public_dict[email.From, email.From][0]):
-                local_dict[(recipient, email.From)] = list(public_dict[email.From, email.From])
-                claim_buffer_by_user[recipient][email.From] = list(public_dict[email.From, email.From])
+        sender_state = global_state.state_by_user[email.From]
+        for recipient in recipients.intersection(context.userset):
+
+            # If recipient hasn't heard about sender, create view
+            # TODO: Why not in global state initialization?
+            if (recipient, email.From) not in global_state.local_views:
+                global_state.create_local_view(recipient, email.From)
+
+            # Update recipient's view with latest committed sender's state
+            recipient_view_of_sender = global_state.local_views.get((recipient, email.From))
+            if recipient_view_of_sender.head != sender_state.head:
+                recipient_view_of_sender.update_from_state(sender_state)
+                global_state.claim_buffer_by_user[recipient][email.From] = sender_state
 
         # Update introductions
         if email.From not in introductions:
             introductions[email.From] = {}
-
         for recipient in recipients:
             if recipient not in introductions[email.From]:
                 introductions[email.From][recipient] = set()
@@ -374,224 +379,38 @@ def simulate_static_claimchain_with_privacy(social_graph, log):
                 introductions[email.From][recipient].add(public_recipient)
 
         # Update the social graph entries of the recipients for their friends, if the sender
-        # knows of a later head and they have access to it
-        for recipient in recipients:
-            if recipient not in claim_buffer_by_user:
-                continue
-            if recipient in introductions[email.From]:
-                for friend in introductions[email.From][recipient]:
-                    if ((email.From, friend) in public_dict and (
-                        (recipient, friend) not in local_dict or local_dict[(recipient, friend)][0] < public_dict[(email.From, friend)][0])):
-                        local_dict[(recipient, friend)] = list(public_dict[(email.From, friend)])
-                        claim_buffer_by_user[recipient][friend] = list(public_dict[(email.From, friend)])
-
-        if index % 100 == 0:
-            key_propagation_data.loc[index] = eval_propagation(local_dict, 1, social_graph, userset)
-            head_propagation_data.loc[index] = eval_propagation(local_dict, 0, social_graph, userset)
-
-    updated, stale, not_updated = eval_propagation(local_dict, 1, social_graph, userset)
-    print("Userset users know of %s updates of their friends, while %s entries were not updated."
-          % (updated + stale, not_updated))
-    print("%s out of the %s emails sent by users in the userset were encrypted." % (enc_userset_emails, sent_userset_emails))
-
-    return key_propagation_data, head_propagation_data
-
-
-def simulate_dynamic_autocrypt(social_graph, log):
-    '''Simulate the dynamic view of Autocrypt
-
-    * Public and private recipients learn of the sender's latest head
-    '''
-    print("Simulating the dynamic view scenario of Autocrypt:")
-
-    userset, local_dict, public_dict, claim_buffer_by_user = prep_static_view(log, social_graph)
-
-    enc_userset_emails = 0
-
-    key_propagation_data = pd.DataFrame(columns=('Updated', 'Stale', 'Not updated'))
-    head_propagation_data = pd.DataFrame(columns=('Updated', 'Stale', 'Not updated'))
-
-    nb_sent_emails_by_user = {}
-
-    for index, email in enumerate(log):
-        recipients = email.To | email.Cc | email.Bcc - {email.From}
-
-        if email.From not in nb_sent_emails_by_user:
-            nb_sent_emails_by_user[email.From] = 0
-        nb_sent_emails_by_user[email.From] += 1
-
-        if nb_sent_emails_by_user[email.From] % 50 == 0:
-            local_dict[(email.From, email.From)][0] += 1
-            claim_buffer_by_user[email.From][email.From] = local_dict[(email.From, email.From)]
-            claim_buffer_by_user, local_dict, public_dict = append_block_policy(claim_buffer_by_user, email.From, local_dict, public_dict, force=True)
-
-        e_status, sent_userset_emails, enc_userset_emails = update_enc_email_status_cnt(email.From, userset, recipients, local_dict, sent_userset_emails, enc_userset_emails)
-        email_status["dyn_autocrypt"].append(e_status)
-
-        claim_buffer_by_user, local_dict, public_dict = append_block_policy(claim_buffer_by_user, email.From, local_dict, public_dict)
-
-        # For all recipients, update their local dict entry for the sender
-        for recipient in recipients:
-            if recipient not in claim_buffer_by_user:
-                continue
-            if ( (recipient, email.From) not in local_dict or
-                 local_dict[(recipient, email.From)][0] < public_dict[email.From, email.From][0]):
-                local_dict[(recipient, email.From)] = list(public_dict[email.From, email.From])
-                claim_buffer_by_user[recipient][email.From] = list(public_dict[email.From, email.From])
-
-        if index % 100 == 0:
-            key_propagation_data.loc[index] = eval_propagation(local_dict, 1, social_graph, userset)
-            head_propagation_data.loc[index] = eval_propagation(local_dict, 0, social_graph, userset)
-
-    updated, stale, not_updated = eval_propagation(local_dict, 1, social_graph, userset)
-    print("Userset users know of %s updates of their friends, while %s entries were not updated."
-          % (updated + stale, not_updated))
-    print("%s out of the %s emails sent by users in the userset were encrypted." % (enc_userset_emails, sent_userset_emails))
-
-    return key_propagation_data, head_propagation_data
-
-
-def simulate_dynamic_claimchain_no_privacy(social_graph, log):
-    '''Simulate the dynamic view of ClaimChain without privacy
-
-    * Public and private recipients learn of the sender's latest head
-    * Public and private recipients learn of the latest head of the friends of the sender
-    '''
-    print("Simulating the dynamic view scenario of ClaimChain with public claims:")
-
-    userset, local_dict, public_dict, claim_buffer_by_user = prep_static_view(log, social_graph)
-    global_graph, global_userset = make_global_graph(log)
-
-    sent_userset_emails = 0
-    enc_userset_emails = 0
-
-    key_propagation_data = pd.DataFrame(columns=('Updated', 'Stale', 'Not updated'))
-    head_propagation_data = pd.DataFrame(columns=('Updated', 'Stale', 'Not updated'))
-
-    nb_sent_emails_by_user = {}
-
-    for index, email in enumerate(log):
-        recipients = email.To | email.Cc | email.Bcc - {email.From}
-
-        if email.From not in nb_sent_emails_by_user:
-            nb_sent_emails_by_user[email.From] = 0
-        nb_sent_emails_by_user[email.From] += 1
-
-        if nb_sent_emails_by_user[email.From] % 50 == 0:
-            local_dict[(email.From, email.From)][1] += 1
-            claim_buffer_by_user[email.From][email.From] = local_dict[(email.From, email.From)]
-            claim_buffer_by_user, local_dict, public_dict = append_block_policy(claim_buffer_by_user, email.From, local_dict, public_dict, force=True)
-
-        e_status, sent_userset_emails, enc_userset_emails = update_enc_email_status_cnt(email.From, userset, recipients, local_dict, sent_userset_emails, enc_userset_emails)
-        email_status["dyn_pub_claimchain"].append(e_status)
-
-        claim_buffer_by_user, local_dict, public_dict = append_block_policy(claim_buffer_by_user, email.From, local_dict, public_dict)
-
-        # For all recipients, update their local dict entry for the sender
-        for recipient in recipients:
-            if recipient not in claim_buffer_by_user:
-                continue
-            if ( (recipient, email.From) not in local_dict or
-                 local_dict[(recipient, email.From)][0] < public_dict[email.From, email.From][0]):
-                local_dict[(recipient, email.From)] = list(public_dict[email.From, email.From])
-                claim_buffer_by_user[recipient][email.From] = list(public_dict[email.From, email.From])
-
-        # Update the social graph entries of the recipients for their friends, if the sender
         # knows of a later head
-        for recipient in recipients:
-            if recipient in global_graph:
-                for friend in global_graph[recipient]['friends']:
-                    if ( (email.From, friend) in public_dict and ( (recipient, friend) not in local_dict or
-                        local_dict[(recipient, friend)][0] < public_dict[(email.From, friend)][0])):
-                            local_dict[(recipient, friend)] = list(public_dict[(email.From, friend)])
-                            claim_buffer_by_user[recipient][email.From] = list(public_dict[email.From, friend])
-
-        if index % 100 == 0:
-            key_propagation_data.loc[index] = eval_propagation(local_dict, 1, social_graph, userset)
-            head_propagation_data.loc[index] = eval_propagation(local_dict, 0, social_graph, userset)
-
-    updated, stale, not_updated = eval_propagation(local_dict, 1, social_graph, userset)
-    print("Userset users know of %s updates of their friends, while %s entries were not updated."
-          % (updated + stale, not_updated))
-    print("%s out of the %s emails sent by users in the userset were encrypted." % (enc_userset_emails, sent_userset_emails))
-
-    return key_propagation_data, head_propagation_data
-
-
-def simulate_dynamic_claimchain_with_privacy(social_graph, log):
-    '''Simulate the dynamic view of ClaimChain with support for private claims (introduction mode)
-
-    * Public and private recipients learn of the sender's latest head
-    * Sender grants access to public and private recipients to read the entries of public recipients in her ClaimChain
-    * Recipients learn of the latest head of the friends of the sender that have the capability to access
-    '''
-    print("Simulating the dynamic view scenario of ClaimChain with private claims and introductions:")
-
-    userset, local_dict, public_dict, claim_buffer_by_user = prep_static_view(log, social_graph)
-    introductions = {}
-
-    enc_userset_emails = 0
-    sent_userset_emails = 0
-
-    key_propagation_data = pd.DataFrame(columns=('Updated', 'Stale', 'Not updated'))
-    head_propagation_data = pd.DataFrame(columns=('Updated', 'Stale', 'Not updated'))
-
-    nb_sent_emails_by_user = defaultdict(int)
-
-    for index, email in enumerate(log):
-        public_recipients = email.To | email.Cc - {email.From}
-        recipients = public_recipients | email.Bcc - {email.From}
-
-        nb_sent_emails_by_user[email.From] += 1
-
-        if nb_sent_emails_by_user[email.From] % 50 == 0:
-            local_dict[(email.From, email.From)][1] += 1
-            claim_buffer_by_user[email.From][email.From] = list(local_dict[(email.From, email.From)])
-            claim_buffer_by_user, local_dict, public_dict = append_block_policy(claim_buffer_by_user, email.From, local_dict, public_dict, force=True)
-
-        e_status, sent_userset_emails, enc_userset_emails = update_enc_email_status_cnt(email.From, userset, recipients, local_dict, sent_userset_emails, enc_userset_emails)
-        email_status["dyn_priv_claimchain"].append(e_status)
-
-        claim_buffer_by_user, local_dict, public_dict = append_block_policy(claim_buffer_by_user, email.From, local_dict, public_dict)
-
-        # Update introductions
-        if email.From not in introductions:
-            introductions[email.From] = {}
-
-        for recipient in recipients:
+        for recipient in recipients.intersection(context.senders):
             if recipient not in introductions[email.From]:
-                    introductions[email.From][recipient] = set()
-            for public_recipient in public_recipients:
-                introductions[email.From][recipient].add(public_recipient)
-
-        # For all recipients, update their local dict entry for the sender
-        for recipient in recipients:
-            if recipient not in claim_buffer_by_user:
                 continue
-            if ( (recipient, email.From) not in local_dict or
-                 local_dict[(recipient, email.From)][0] < public_dict[email.From, email.From][0]):
-                local_dict[(recipient, email.From)] = list(public_dict[email.From, email.From])
-                claim_buffer_by_user[recipient][email.From] = list(public_dict[email.From, email.From])
 
-        # Update the social graph entries of the recipients for their friends, if the sender
-        # knows of a later head and they have access to it
-        for recipient in recipients:
-            if recipient not in claim_buffer_by_user:
-                continue
-            if recipient in introductions[email.From]:
-                for friend in introductions[email.From][recipient]:
-                    if ((email.From, friend) in public_dict and (
-                        (recipient, friend) not in local_dict or local_dict[(recipient, friend)][0] < public_dict[(email.From, friend)][0])):
-                        local_dict[(recipient, friend)] = list(public_dict[(email.From, friend)])
-                        claim_buffer_by_user[recipient][friend] = list(public_dict[(email.From, friend)])
+            for friend in introductions[email.From][recipient]:
+                if (email.From, friend) not in global_state.public_views:
+                    continue
+
+                if (recipient, friend) not in global_state.local_views:
+                    # TODO: Why not in global state initialization?
+                    global_state.create_local_view(recipient, friend)
+
+                recipient_view_of_friend = global_state.local_views[(recipient, friend)]
+                sender_public_view_of_friend = global_state.public_views[(email.From, friend)]
+
+                if recipient_view_of_friend.head != sender_public_view_of_friend.head:
+                    recipient_view_of_friend.update_from_view(sender_public_view_of_friend)
+                    global_state.claim_buffer_by_user[recipient][friend] = sender_public_view_of_friend
 
         if index % 100 == 0:
-            key_propagation_data.loc[index] = eval_propagation(local_dict, 1, social_graph, userset)
-            head_propagation_data.loc[index] = eval_propagation(local_dict, 0, social_graph, userset)
+            key_propagation_data.loc[index] = global_state.eval_propagation(mode='key')
+            head_propagation_data.loc[index] = global_state.eval_propagation(mode='head')
 
-    updated, stale, not_updated = eval_propagation(local_dict, 1, social_graph, userset)
-    print("Userset users know of %s updates of their friends, while %s entries were not updated."
-          % (updated + stale, not_updated))
-    print("%s out of the %s emails sent by users in the userset were encrypted." % (enc_userset_emails, sent_userset_emails))
+    updated, stale, not_updated = global_state.eval_propagation(mode='key')
+    print('Keys:   Updated: %d, Not updated: %d, Stale: %d' % (updated, not_updated, stale))
 
-    return key_propagation_data, head_propagation_data
+    updated, stale, not_updated = global_state.eval_propagation(mode='head')
+    print('Heads:  Updated: %d, Not updated: %d, Stale: %d' % (updated, not_updated, stale))
+
+    print('Emails: Sent: %d, Encrypted: %d' % (
+        global_state.sent_email_count,
+        global_state.encrypted_email_count))
+
+    return key_propagation_data, head_propagation_data, encryption_status_data
