@@ -1,18 +1,19 @@
+import os
+import base64
 import pickle
-
-from enum import Enum
-from collections import defaultdict
 
 import numpy as np
 import pandas as pd
+import hippiehug
+import claimchain
+
+from enum import Enum
+from collections import defaultdict
 
 from attr import Factory, attrs, attrib, evolve as clone
 from defaultcontext import with_default_context
 
 from .parse_enron import Message
-
-
-enc_status = {"plaintext": 0, "stale": 1, "encrypted": 2}
 
 
 class EncStatus(Enum):
@@ -34,6 +35,82 @@ class SimulationParams(object):
     # Max number of sent emails by a user after which she updates her key.
     # If None, keys are never updated
     key_update_every_nb_sent_emails = attrib(default=None)
+
+
+class DummyMode(object):
+    @attrs
+    class View(object):
+        key = attrib(default=None)
+        head = attrib(default=None)
+
+        def update_from_state(self, state):
+            self.key = state.key
+            self.head = state.head
+
+        def update_from_view(self, other_view):
+            self.key = other_view.key
+            self.head = other_view.head
+
+    @attrs
+    class State(object):
+        key = attrib(default=1)
+        head = attrib(default=1)
+
+        def update_head(self, global_state=None, claim_buffer=None):
+            self.head += 1
+
+        def update_key(self):
+            self.key += 1
+
+
+class ClaimchainMode(object):
+
+    @staticmethod
+    def generate_public_key():
+        # 4096 random bits in base64
+        return base64.b64encode(os.urandom(4096 // 8))
+
+    @attrs
+    class View(object):
+        key = attrib(default=None)
+        head = attrib(default=None)
+
+        def update_from_state(self, state):
+            self.key = state.key
+            self.head = state.head
+
+            self._view = claimchain.View(state.chain)
+
+        def update_from_view(self, other_view):
+            self.key = other_view.key
+            self.head = other_view.head
+
+    @attrs
+    class State(object):
+        key = attrib(default=Factory(lambda: ClaimchainMode.generate_public_key()))
+        params = attrib(default=Factory(lambda: claimchain.LocalParams.generate()))
+
+        def __attrs_post_init__(self):
+            with self.params.as_default():
+                self._chain = hippiehug.Chain()
+                self._state = claimchain.State()
+
+        @property
+        def head(self):
+            head = self._chain.head
+            if head is not None:
+                head = base64.b64encode(self._chain.head)
+            return head
+
+        @property
+        def chain(self):
+            return self._chain
+
+        def update_head(self, claim_buffer=None):
+            self.head += 1
+
+        def update_key(self):
+            self.key += 1
 
 
 class Context(object):
@@ -58,32 +135,6 @@ class Context(object):
 
 
 @attrs
-class View(object):
-    key = attrib(default=None)
-    head = attrib(default=None)
-
-    def update_from_state(self, state):
-        self.key = state.key
-        self.head = state.head
-
-    def update_from_view(self, other_view):
-        self.key = other_view.key
-        self.head = other_view.head
-
-
-@attrs
-class State(object):
-    key = attrib(default=1)
-    head = attrib(default=1)
-
-    def update_head(self, global_state=None, claim_buffer=None):
-        self.head += 1
-
-    def update_key(self):
-        self.key += 1
-
-
-@attrs
 class GlobalState(object):
     context                    = attrib()
     local_views                = attrib(default=Factory(dict))
@@ -95,13 +146,28 @@ class GlobalState(object):
     encrypted_email_count      = attrib(default=0)
 
     def create_local_view(self, user, friend):
-        self.local_views[(user, friend)] = View()
+        mode = SimulationParams.get_default().mode
+        if mode == 'dummy':
+            self.local_views[(user, friend)] = DummyMode.View()
+        elif mode == 'claimchain':
+            state = self.state_by_user[user]
+            with state.params.as_default():
+                self.local_views[(user, friend)] = ClaimchainMode.View()
 
     def create_public_view(self, user, friend):
-        self.public_views[(user, friend)] = View()
+        mode = SimulationParams.get_default().mode
+        if mode == 'dummy':
+            self.public_views[(user, friend)] = DummyMode.View()
+        elif mode == 'claimchain':
+            pass
+            # self.public_views[(user, friend)] = ClaimchainMode.View()
 
     def create_state(self, user):
-        self.state_by_user[user] = State()
+        mode = SimulationParams.get_default().mode
+        if mode == 'dummy':
+            self.state_by_user[user] = DummyMode.State()
+        elif mode == 'claimchain':
+            self.state_by_user[user] = ClaimchainMode.State()
 
     def eval_propagation(self, mode='key'):
         '''
@@ -178,8 +244,10 @@ class GlobalState(object):
                 if (user, friend) not in self.public_views:
                     self.create_public_view(user, friend)
                 self.public_views[(user, friend)].update_from_view(view)
-            self.claim_buffer_by_user[user].clear()
-            self.state_by_user[user].update_head()
+
+            claim_buffer = self.claim_buffer_by_user[user]
+            self.state_by_user[user].update_head(claim_buffer=claim_buffer)
+            claim_buffer.clear()
             return True
 
         return False

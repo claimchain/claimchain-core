@@ -39,18 +39,26 @@ def context(log, social_graph):
     return Context(log, social_graph)
 
 
-def test_create_global_state(context, default_params):
-    with SimulationParams().as_default():
+def test_claimchain_mode_state(context):
+    state = ClaimchainMode.State()
+    state.head == state.chain.head
+
+
+@pytest.mark.parametrize('params', [
+        SimulationParams(mode='dummy'),
+        SimulationParams(mode='claimchain')
+    ])
+def test_create_global_state(context, params):
+    with params.as_default():
         state = create_global_state(context)
         assert len(state.local_views) > 0
         assert len(state.state_by_user) == len(context.senders)
         assert state.local_views is not state.public_views
 
 
-
 @pytest.mark.parametrize('mode', ['key', 'head'])
-def test_eval_propagation(context, mode):
-    with SimulationParams(mode=mode).as_default():
+def test_eval_propagation(context, mode, default_params):
+    with default_params.as_default():
         state = create_global_state(context)
         updated, stale, not_updated = \
                 state.eval_propagation(mode=mode)
