@@ -69,7 +69,15 @@ class State(object):
         self._payload = None
         self._tree = None
 
-    def commit(self, target_chain, nonce=None):
+    @property
+    def tree(self):
+        if self._tree is None:
+            raise ValueError('State not committed yet.')
+        return self._tree
+
+    def commit(self, target_chain, tree_store=None, nonce=None):
+        if tree_store is None:
+            tree_store = target_chain.store
         nonce = nonce or os.urandom(PublicParams.get_default().nonce_size)
 
         # Encode claims
@@ -96,7 +104,7 @@ class State(object):
                 enc_items_map[lookup_key] = enc_cap
 
         # Put all the encrypted items in a new tree
-        tree = _build_tree(target_chain.store, enc_items_map)
+        tree = _build_tree(tree_store, enc_items_map)
 
         # Construct payload
         payload = Payload.build(tree=tree, nonce=nonce).export()
@@ -108,6 +116,10 @@ class State(object):
         self._vrf_value_by_label = vrf_value_by_label
 
         return target_chain.head
+
+    def compute_claim_evidence_keys(self, label, reader_dh_pk):
+        cap
+        raw_evidence = self.tree.evidence(label)
 
     def clear(self):
         self._claim_content_by_label.clear()
@@ -195,3 +207,9 @@ class View(object):
         vrf_value, claim_lookup_key = self._lookup_capability(claim_label)
         claim = self._lookup_claim(claim_label, vrf_value, claim_lookup_key)
         return claim
+
+    def get(self, claim_label):
+        try:
+            return self[claim_label]
+        except KeyError:
+            return None
