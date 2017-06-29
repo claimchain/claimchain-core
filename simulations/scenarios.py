@@ -56,7 +56,7 @@ class DummyMode(object):
         key = attrib(default=1)
         head = attrib(default=1)
 
-        def update_head(self, global_state=None, claim_buffer=None):
+        def update_head(self, claim_buffer=None):
             self.head += 1
 
         def update_key(self):
@@ -79,21 +79,20 @@ class ClaimchainMode(object):
             self.key = state.key
             self.head = state.head
 
-            self._view = claimchain.View(state.chain)
-
         def update_from_view(self, other_view):
             self.key = other_view.key
             self.head = other_view.head
 
     @attrs
     class State(object):
-        key = attrib(default=Factory(lambda: ClaimchainMode.generate_public_key()))
+        key = attrib(default=None)
         params = attrib(default=Factory(lambda: claimchain.LocalParams.generate()))
 
         def __attrs_post_init__(self):
-            with self.params.as_default():
-                self._chain = hippiehug.Chain()
-                self._state = claimchain.State()
+            self._chain = hippiehug.Chain()
+            self._claims = {}
+            self.update_key()
+            self.update_head()
 
         @property
         def head(self):
@@ -107,10 +106,20 @@ class ClaimchainMode(object):
             return self._chain
 
         def update_head(self, claim_buffer=None):
-            self.head += 1
+            # TODO: Add capabilities
+            with self.params.as_default():
+                claim_buffer = claim_buffer or {}
+                state = claimchain.State()
+                for email, view in claim_buffer.items():
+                    self._claims[email] = view.head
+
+                for label, claim in self._claims.items():
+                    state[label] = claim
+                return state.commit(self._chain)
 
         def update_key(self):
-            self.key += 1
+            self.key = ClaimchainMode.generate_public_key()
+            self._claims['encryption_key'] = self.key
 
 
 class Context(object):
@@ -146,21 +155,14 @@ class GlobalState(object):
     encrypted_email_count      = attrib(default=0)
 
     def create_local_view(self, user, friend):
-        mode = SimulationParams.get_default().mode
-        if mode == 'dummy':
-            self.local_views[(user, friend)] = DummyMode.View()
-        elif mode == 'claimchain':
-            state = self.state_by_user[user]
-            with state.params.as_default():
-                self.local_views[(user, friend)] = ClaimchainMode.View()
+        self.local_views[(user, friend)] = DummyMode.View()
 
     def create_public_view(self, user, friend):
         mode = SimulationParams.get_default().mode
         if mode == 'dummy':
             self.public_views[(user, friend)] = DummyMode.View()
         elif mode == 'claimchain':
-            pass
-            # self.public_views[(user, friend)] = ClaimchainMode.View()
+            self.public_views[(user, friend)] = ClaimchainMode.View()
 
     def create_state(self, user):
         mode = SimulationParams.get_default().mode
@@ -180,7 +182,6 @@ class GlobalState(object):
 
         updated = 0
         stale = 0
-        not_updated = 0
 
         for user in self.context.userset:
             for friend in self.context.social_graph[user]['friends']:
@@ -192,7 +193,6 @@ class GlobalState(object):
                 # If value is None, then user did not learn of her friend's updates
                 mode_view = getattr(self.local_views[(user, friend)], mode)
                 if mode_view is None:
-                    not_updated += 1
                     continue
 
                 # If the friend is not included in the userset, and value is greater than 0,
@@ -208,7 +208,7 @@ class GlobalState(object):
                 else:
                     stale += 1
 
-        return updated, stale, not_updated
+        return updated, stale
 
     def record_sent_email(self, user, recipients):
         status = EncStatus.encrypted
@@ -223,15 +223,14 @@ class GlobalState(object):
             # If sender does not know of a recipient's enc key, the email is
             # sent in clear text
             if (view is None or view.key is None):
+                status = EncStatus.plaintext
                 if user in self.context.userset:
                     self.encrypted_email_count -= 1
-                    status = EncStatus.plaintext
+                break
 
             elif recipient in self.context.senders and \
                  view.key != self.state_by_user[recipient].key:
                 status = EncStatus.stale
-                # TODO: Why no break here?
-                # break
 
         return status
 
@@ -267,15 +266,8 @@ class GlobalState(object):
 def create_global_state(context):
     '''Prepare the global state of the simulation'''
     global_state = GlobalState(context)
-
-    # Initialize the latest known head dictionary
-    for email in context.log:
-        global_state.create_state(email.From)
-        recipients = email.To | email.Cc | email.Bcc - {email.From}
-        for recipient in recipients:
-            global_state.create_local_view(email.From, recipient)
-            global_state.create_public_view(email.From, recipient)
-
+    for sender in context.senders:
+        global_state.create_state(sender)
     return global_state
 
 
@@ -289,11 +281,16 @@ def simulate_autocrypt(context):
 
     global_state = create_global_state(context)
 
-    key_propagation_data = pd.DataFrame(columns=('Updated', 'Stale', 'Not updated'))
+    key_propagation_data = pd.DataFrame(columns=('Updated', 'Stale'))
     encryption_status_data = pd.Series()
 
     for index, email in enumerate(context.log):
         recipients = email.To | email.Cc | email.Bcc - {email.From}
+        for recipient in recipients:
+            if (email.From, recipient) not in global_state.local_views:
+                global_state.create_local_view(email.From, recipient)
+            if (email.From, recipient) not in global_state.public_views:
+                global_state.create_public_view(email.From, recipient)
 
         global_state.maybe_update_key(email.From)
 
@@ -303,6 +300,8 @@ def simulate_autocrypt(context):
         # For all recipients, update their local dict entry for the sender
         sender_state = global_state.state_by_user[email.From]
         for recipient in recipients:
+            if (recipient, email.From) not in global_state.local_views:
+                global_state.create_local_view(recipient, email.From)
             if (recipient, email.From) in global_state.local_views:
                 global_state.local_views[(recipient, email.From)] \
                         .update_from_state(sender_state)
@@ -310,9 +309,9 @@ def simulate_autocrypt(context):
         if index % 100 == 0:
             key_propagation_data.loc[index] = global_state.eval_propagation(mode='key')
 
-    updated, stale, not_updated = global_state.eval_propagation(mode='key')
+    updated, stale = global_state.eval_propagation(mode='key')
 
-    print('Keys.   Updated: %d, Not updated: %d, Stale: %d' % (updated, not_updated, stale))
+    print('Keys.   Updated: %d, Stale: %d' % (updated, stale))
     print('Emails. Sent: %d, Encrypted: %d' % (
         global_state.sent_email_count,
         global_state.encrypted_email_count))
@@ -331,12 +330,17 @@ def simulate_claimchain_no_privacy(context):
 
     global_state = create_global_state(context)
 
-    key_propagation_data = pd.DataFrame(columns=('Updated', 'Stale', 'Not updated'))
-    head_propagation_data = pd.DataFrame(columns=('Updated', 'Stale', 'Not updated'))
+    key_propagation_data = pd.DataFrame(columns=('Updated', 'Stale'))
+    head_propagation_data = pd.DataFrame(columns=('Updated', 'Stale'))
     encryption_status_data = pd.Series()
 
     for index, email in enumerate(context.log):
         recipients = email.To | email.Cc | email.Bcc - {email.From}
+        for recipient in recipients:
+            if (email.From, recipient) not in global_state.local_views:
+                global_state.create_local_view(email.From, recipient)
+            if (email.From, recipient) not in global_state.public_views:
+                global_state.create_public_view(email.From, recipient)
 
         global_state.maybe_update_key(email.From)
         global_state.maybe_update_chain(email.From)
@@ -380,11 +384,11 @@ def simulate_claimchain_no_privacy(context):
             key_propagation_data.loc[index] = global_state.eval_propagation(mode='key')
             head_propagation_data.loc[index] = global_state.eval_propagation(mode='head')
 
-    updated, stale, not_updated = global_state.eval_propagation(mode='key')
-    print('Keys:   Updated: %d, Not updated: %d, Stale: %d' % (updated, not_updated, stale))
+    updated, stale = global_state.eval_propagation(mode='key')
+    print('Keys:   Updated: %d, Stale: %d' % (updated, stale))
 
-    updated, stale, not_updated = global_state.eval_propagation(mode='head')
-    print('Heads:  Updated: %d, Not updated: %d, Stale: %d' % (updated, not_updated, stale))
+    updated, stale = global_state.eval_propagation(mode='head')
+    print('Heads:  Updated: %d, Stale: %d' % (updated, stale))
 
     print('Emails: Sent: %d, Encrypted: %d' % (
         global_state.sent_email_count,
@@ -406,13 +410,18 @@ def simulate_claimchain_with_privacy(context):
     global_state = create_global_state(context)
     introductions = {}
 
-    key_propagation_data = pd.DataFrame(columns=('Updated', 'Stale', 'Not updated'))
-    head_propagation_data = pd.DataFrame(columns=('Updated', 'Stale', 'Not updated'))
+    key_propagation_data = pd.DataFrame(columns=('Updated', 'Stale'))
+    head_propagation_data = pd.DataFrame(columns=('Updated', 'Stale'))
     encryption_status_data = pd.Series()
 
     for index, email in enumerate(context.log):
         public_recipients = email.To | email.Cc - {email.From}
         recipients = public_recipients | email.Bcc - {email.From}
+        for recipient in recipients:
+            if (email.From, recipient) not in global_state.local_views:
+                global_state.create_local_view(email.From, recipient)
+            if (email.From, recipient) not in global_state.public_views:
+                global_state.create_public_view(email.From, recipient)
 
         global_state.maybe_update_key(email.From)
         global_state.maybe_update_chain(email.From)
@@ -467,11 +476,11 @@ def simulate_claimchain_with_privacy(context):
             key_propagation_data.loc[index] = global_state.eval_propagation(mode='key')
             head_propagation_data.loc[index] = global_state.eval_propagation(mode='head')
 
-    updated, stale, not_updated = global_state.eval_propagation(mode='key')
-    print('Keys:   Updated: %d, Not updated: %d, Stale: %d' % (updated, not_updated, stale))
+    updated, stale = global_state.eval_propagation(mode='key')
+    print('Keys:   Updated: %d, Stale: %d' % (updated, stale))
 
-    updated, stale, not_updated = global_state.eval_propagation(mode='head')
-    print('Heads:  Updated: %d, Not updated: %d, Stale: %d' % (updated, not_updated, stale))
+    updated, stale = global_state.eval_propagation(mode='head')
+    print('Heads:  Updated: %d, Stale: %d' % (updated, stale))
 
     print('Emails: Sent: %d, Encrypted: %d' % (
         global_state.sent_email_count,

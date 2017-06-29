@@ -39,11 +39,6 @@ def context(log, social_graph):
     return Context(log, social_graph)
 
 
-def test_claimchain_mode_state(context):
-    state = ClaimchainMode.State()
-    state.head == state.chain.head
-
-
 @pytest.mark.parametrize('params', [
         SimulationParams(mode='dummy'),
         SimulationParams(mode='claimchain')
@@ -51,7 +46,7 @@ def test_claimchain_mode_state(context):
 def test_create_global_state(context, params):
     with params.as_default():
         state = create_global_state(context)
-        assert len(state.local_views) > 0
+        assert len(state.local_views) == 0
         assert len(state.state_by_user) == len(context.senders)
         assert state.local_views is not state.public_views
 
@@ -60,11 +55,9 @@ def test_create_global_state(context, params):
 def test_eval_propagation(context, mode, default_params):
     with default_params.as_default():
         state = create_global_state(context)
-        updated, stale, not_updated = \
-                state.eval_propagation(mode=mode)
+        updated, stale = state.eval_propagation(mode=mode)
         assert updated == 0
         assert stale == 0
-        assert not_updated > 0
 
 
 @pytest.mark.parametrize('params', [
@@ -85,7 +78,7 @@ def test_autocrypt_stale_propagation(context, params):
 
 @pytest.mark.parametrize('params,any_stale_keys', [
         (SimulationParams(chain_update_buffer_size=10, key_update_every_nb_sent_emails=None), False),
-        (SimulationParams(chain_update_buffer_size=10, key_update_every_nb_sent_emails=5), True)
+        (SimulationParams(chain_update_buffer_size=10, key_update_every_nb_sent_emails=5), True),
     ])
 def test_claimchain_no_privacy_propagation(context, params, any_stale_keys):
     with params.as_default():
