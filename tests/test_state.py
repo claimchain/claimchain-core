@@ -8,6 +8,7 @@ from claimchain.core import get_capability_lookup_key
 from claimchain.core import _compute_claim_key, _salt_label
 from claimchain.crypto import PublicParams, LocalParams, compute_vrf
 from claimchain.utils import ascii2bytes
+from claimchain.utils import Tree, ObjectStore
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -93,6 +94,23 @@ def test_tree_contains_cap_lookup_key(state):
     root, evidence = tree.evidence(key=lookup_key)
     leaf = evidence[-1]
     assert leaf.key == lookup_key
+
+
+def test_evidence(state):
+    reader_params = LocalParams.generate()
+    reader_pk = reader_params.dh.pk
+    state.grant_access(reader_pk, ["marios"])
+
+    nonce, chain, tree = commit_claims(state, [("marios", "test")])
+    evidence = state.compute_evidence_keys(reader_pk, "marios")
+    assert len(evidence) > 0
+
+    evidence_store = ObjectStore({k: tree.store[k] for k in evidence})
+    verification_tree = Tree(object_store=evidence_store, root_hash=tree.root())
+
+    with reader_params.as_default():
+        view = View(source_chain=chain, source_tree=verification_tree)
+        assert view["marios"] == b"test"
 
 
 def test_view_missing_and_non_existent_label(state):

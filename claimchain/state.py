@@ -13,6 +13,7 @@ from hippiehug import Tree
 from .core import get_capability_lookup_key
 from .core import encode_capability, decode_capability
 from .core import encode_claim, decode_claim
+from .core import _compute_claim_key
 from .crypto import PublicParams, LocalParams
 from .crypto import sign, verify_signature
 from .utils import bytes2ascii, ascii2bytes, pet2ascii, ascii2pet
@@ -78,7 +79,8 @@ class State(object):
     def commit(self, target_chain, tree_store=None, nonce=None):
         if tree_store is None:
             tree_store = target_chain.store
-        nonce = nonce or os.urandom(PublicParams.get_default().nonce_size)
+        self._nonce = nonce = \
+                nonce or os.urandom(PublicParams.get_default().nonce_size)
 
         # Encode claims
         enc_items_map = {}
@@ -117,9 +119,24 @@ class State(object):
 
         return target_chain.head
 
-    def compute_claim_evidence_keys(self, label, reader_dh_pk):
-        cap
-        raw_evidence = self.tree.evidence(label)
+    def compute_evidence_keys(self, reader_dh_pk, claim_label):
+        vrf_value = self._vrf_value_by_label[claim_label]
+        cap_lookup_key = get_capability_lookup_key(
+                reader_dh_pk, self._nonce, claim_label)
+
+        # Compute capability entry evidence
+        _, raw_cap_evidence = self.tree.evidence(cap_lookup_key)
+        claim_lookup_key = _compute_claim_key(vrf_value, mode='lookup')
+
+        # Compute claim evidence
+        _, raw_claim_evidence = self.tree.evidence(claim_lookup_key)
+        object_keys = {obj.hid for obj in raw_cap_evidence} | \
+                      {obj.hid for obj in raw_claim_evidence}
+
+        # Add encoded capability and encoded claim value
+        encoded_cap_hash = raw_cap_evidence[-1].item
+        encoded_claim_hash = raw_claim_evidence[-1].item
+        return object_keys | {encoded_claim_hash} | {encoded_cap_hash}
 
     def clear(self):
         self._claim_content_by_label.clear()
@@ -129,16 +146,6 @@ class State(object):
         self._vrf_value_by_label.clear()
         self._payload = None
         self._tree = None
-
-    def _compute_claim_lookup_key(self, vrf):
-        pp = PublicParams.get_default()
-        return pp.hash_func(
-                b"clm_lookup|" + vrf.value).digest()[:pp.short_hash_size]
-
-    def _compute_claim_enc_key(self, vrf):
-        pp = PublicParams.get_default()
-        return pp.hash_func(
-                b"clm_enc_key|" + vrf.value).digest()[:pp.enc_key_size]
 
     def __getitem__(self, label):
         return self._claim_content_by_label[label]
@@ -157,7 +164,7 @@ class State(object):
 
 
 class View(object):
-    def __init__(self, source_chain):
+    def __init__(self, source_chain, source_tree=None):
         self._chain = source_chain
         self._block = self._chain.store[self._chain.head]
 
@@ -166,14 +173,14 @@ class View(object):
         self._nonce = ascii2bytes(payload.nonce)
         self._params = LocalParams.from_dict(payload.metadata)
 
-        self.tree = Tree(
+        self.tree = source_tree or Tree(
                 object_store=ObjectStore(self._chain.store),
                 root_hash=ascii2bytes(payload.mtr_hash))
 
-        self.validate()
+        assert ascii2bytes(payload.mtr_hash) == self.tree.root_hash
 
+    # TODO: This validation is incorrect for any block but the genesis
     def validate(self):
-        # TODO: This validation is incorrect for any block but the genesis
         owner_sig_pk = self._params.sig.pk
         raw_sig_backup = self._block.aux
         sig = ascii2pet(raw_sig_backup)
