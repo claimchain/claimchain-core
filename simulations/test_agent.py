@@ -40,7 +40,7 @@ def test_agent_send_and_receive_email(global_state):
     with pytest.raises(KeyError), bob.params.as_default():
         bob.view_buffer['alice@test.com']['carol@test.com']
 
-    alice.add_expected_reader('bob@test.com', 'carol@test.com')
+    alice.add_expected_reader('bob@test.com', ['carol@test.com'])
     alice.maybe_update_chain(force=True)
     alice_head_2, email_store = alice.send_message(['bob@test.com'])
 
@@ -64,3 +64,6 @@ def test_agent_send_and_receive_email(global_state):
     # Now Bob can read the claim
     with bob.params.as_default():
         assert bob.view_buffer['alice@test.com']['carol@test.com'] == carol.head
+
+    assert len(bob.stores['alice@test.com']) > 0
+    assert len(alice.sent_email_store_cache['bob@test.com']) > 0

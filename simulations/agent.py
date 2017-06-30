@@ -47,7 +47,8 @@ class Agent(object):
         self.cap_buffer = {}
         self.view_buffer = {}
 
-        self.email_store_caches = {}
+        self.sent_email_store_cache = {}
+        self.stores = defaultdict(dict)
 
         # Make the encryption key public right away
         self.cap_buffer[PUBLIC_READER_LABEL] = {ENC_KEY_LABEL}
@@ -63,11 +64,11 @@ class Agent(object):
     def key(self):
         return self.enc_key
 
-    def add_expected_reader(self, reader, claim_label):
+    def add_expected_reader(self, reader, claim_labels):
         if reader not in self.cap_buffer:
-            self.cap_buffer[reader] = {claim_label}
+            self.cap_buffer[reader] = set(claim_labels)
         else:
-            self.cap_buffer[reader].add(claim_label)
+            self.cap_buffer[reader].update(claim_labels)
 
     def send_message(self, recipients):
         with self.params.as_default():
@@ -98,12 +99,12 @@ class Agent(object):
                 # NOTE: Requires that chain and tree use separate stores
                 object_keys = set(self.chain_store.keys()) | evidence_keys
 
-                if recipient not in self.email_store_caches:
-                    self.email_store_caches[recipient] = set(object_keys)
+                if recipient not in self.sent_email_store_cache:
+                    self.sent_email_store_cache[recipient] = set(object_keys)
 
                 # If some of the objects were already sent, only send the diff
                 else:
-                    object_keys = object_keys - self.email_store_caches[recipient]
+                    object_keys = object_keys - self.sent_email_store_cache[recipient]
                 relevant_object_keys.update(object_keys)
 
             # Add evidence for public claims
@@ -125,9 +126,14 @@ class Agent(object):
 
     def receive_message(self, sender, head, email_store):
         with self.params.as_default():
-            email_store = dict(email_store)
-            sender_chain = Chain(email_store, root_hash=head)
+            # Merge received object store with existing local store
+            for key in email_store:
+                self.stores[sender][key] = email_store[key]
+            full_store = self.stores[sender]
+
+            sender_chain = Chain(full_store, root_hash=head)
             self.view_buffer[sender] = View(source_chain=sender_chain)
+
 
     def _maybe_get_from_view(self, view, claim_label):
         with self.params.as_default():
