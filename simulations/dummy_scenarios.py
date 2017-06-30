@@ -184,7 +184,9 @@ class GlobalState(object):
         stale = 0
 
         for user in self.context.userset:
-            for friend in self.context.social_graph[user]['friends']:
+            friends = self.context.userset.intersection(
+                    self.context.social_graph[user]['friends'])
+            for friend in friends:
                 # Do not count links derived from emails found in the Sent directories of the users
                 # in the userset, when the sender address is not the main one of that user
                 if (user, friend) not in self.local_views:
@@ -211,28 +213,34 @@ class GlobalState(object):
         return updated, stale
 
     def record_sent_email(self, user, recipients):
-        status = EncStatus.encrypted
-        if user in self.context.userset:
-            self.sent_email_count += 1
-            self.encrypted_email_count += 1
-            self.nb_sent_emails_by_user[user] += 1
+        self.nb_sent_emails_by_user[user] += 1
 
+        if user not in self.context.userset:
+            return None
+
+        recipients = recipients.intersection(self.context.userset)
+        if not recipients:
+            return None
+
+        self.sent_email_count += 1
+        stale = False
         for recipient in recipients:
             view = self.local_views.get((user, recipient))
 
             # If sender does not know of a recipient's enc key, the email is
             # sent in clear text
             if (view is None or view.key is None):
-                status = EncStatus.plaintext
-                if user in self.context.userset:
-                    self.encrypted_email_count -= 1
-                break
+                return EncStatus.plaintext
 
             elif recipient in self.context.senders and \
                  view.key != self.state_by_user[recipient].key:
-                status = EncStatus.stale
+                stale = True
 
-        return status
+        if not stale:
+            self.encrypted_email_count += 1
+            return EncStatus.encrypted
+        else:
+            return EncStatus.stale
 
     def maybe_update_chain(self, user, force=False):
         min_buffer_size = SimulationParams.get_default().chain_update_buffer_size
@@ -350,8 +358,7 @@ def simulate_claimchain_no_privacy(context):
 
         # For all recipients, update their local dict entry for the sender
         sender_state = global_state.state_by_user[email.From]
-        for recipient in recipients.intersection(context.senders):
-
+        for recipient in recipients:
             # If recipient hasn't heard about sender, create view
             # TODO: Why not in global state initialization?
             if (recipient, email.From) not in global_state.local_views:
@@ -361,7 +368,8 @@ def simulate_claimchain_no_privacy(context):
             recipient_view_of_sender = global_state.local_views.get((recipient, email.From))
             if recipient_view_of_sender.head != sender_state.head:
                 recipient_view_of_sender.update_from_state(sender_state)
-                global_state.claim_buffer_by_user[recipient][email.From] = sender_state
+                if recipient in context.senders:
+                    global_state.claim_buffer_by_user[recipient][email.From] = sender_state
 
         # Update the social graph entries of the recipients for their friends, if the sender
         # knows of a later head
