@@ -6,35 +6,9 @@ import pickle
 import numpy as np
 
 from .dummy_scenarios import *
-from .parse_enron import Message
-
-import __main__
-__main__.Message = Message
-
-
-parsed_logs_folder = 'Enron/parsing/'
-log_entries_lim = 10000
 
 
 update_chain_thresh = 0
-
-
-@pytest.fixture
-def log():
-    with open(parsed_logs_folder + "replay_log.pkl", "rb") as f:
-        yield pickle.load(f)[:log_entries_lim]
-
-
-@pytest.fixture
-def social_graph():
-    with open(parsed_logs_folder + "social.pkl", "rb") as f:
-        yield pickle.load(f)
-
-
-@pytest.fixture
-def default_params():
-    with SimulationParams().as_default() as params:
-        yield params
 
 
 @pytest.fixture
@@ -42,12 +16,8 @@ def context(log, social_graph):
     return Context(log, social_graph)
 
 
-@pytest.mark.parametrize('params', [
-        SimulationParams(mode='dummy'),
-        SimulationParams(mode='claimchain')
-    ])
-def test_create_global_state(context, params):
-    with params.as_default():
+def test_create_global_state(context, default_params):
+    with default_params.as_default():
         state = create_global_state(context)
         assert len(state.local_views) == 0
         assert len(state.state_by_user) == len(context.senders)

@@ -14,112 +14,32 @@ from attr import Factory, attrs, attrib, evolve as clone
 from defaultcontext import with_default_context
 
 from .parse_enron import Message
+from .utils import SimulationParams, EncStatus
 
 
-class EncStatus(Enum):
-    plaintext = 0
-    stale = 1
-    encrypted = 2
-
-
-@with_default_context
 @attrs
-class SimulationParams(object):
-    # One of 'dummy', 'real_code'
-    mode = attrib(default='dummy')
+class View(object):
+    key = attrib(default=None)
+    head = attrib(default=None)
 
-    # Max buffer size for user after which she updates her chain.
-    # If None, chains are never updated
-    chain_update_buffer_size = attrib(default=None)
+    def update_from_state(self, state):
+        self.key = state.key
+        self.head = state.head
 
-    # Max number of sent emails by a user after which she updates her key.
-    # If None, keys are never updated
-    key_update_every_nb_sent_emails = attrib(default=None)
+    def update_from_view(self, other_view):
+        self.key = other_view.key
+        self.head = other_view.head
 
+@attrs
+class State(object):
+    key = attrib(default=1)
+    head = attrib(default=1)
 
-class DummyMode(object):
-    @attrs
-    class View(object):
-        key = attrib(default=None)
-        head = attrib(default=None)
+    def update_head(self, claim_buffer=None):
+        self.head += 1
 
-        def update_from_state(self, state):
-            self.key = state.key
-            self.head = state.head
-
-        def update_from_view(self, other_view):
-            self.key = other_view.key
-            self.head = other_view.head
-
-    @attrs
-    class State(object):
-        key = attrib(default=1)
-        head = attrib(default=1)
-
-        def update_head(self, claim_buffer=None):
-            self.head += 1
-
-        def update_key(self):
-            self.key += 1
-
-
-class ClaimchainMode(object):
-
-    @staticmethod
-    def generate_public_key():
-        # 4096 random bits in base64
-        return base64.b64encode(os.urandom(4096 // 8))
-
-    @attrs
-    class View(object):
-        key = attrib(default=None)
-        head = attrib(default=None)
-
-        def update_from_state(self, state):
-            self.key = state.key
-            self.head = state.head
-
-        def update_from_view(self, other_view):
-            self.key = other_view.key
-            self.head = other_view.head
-
-    @attrs
-    class State(object):
-        key = attrib(default=None)
-        params = attrib(default=Factory(lambda: claimchain.LocalParams.generate()))
-
-        def __attrs_post_init__(self):
-            self._chain = hippiehug.Chain()
-            self._claims = {}
-            self.update_key()
-            self.update_head()
-
-        @property
-        def head(self):
-            head = self._chain.head
-            if head is not None:
-                head = base64.b64encode(self._chain.head)
-            return head
-
-        @property
-        def chain(self):
-            return self._chain
-
-        def update_head(self, claim_buffer=None):
-            # TODO: Add capabilities
-            with self.params.as_default():
-                claim_buffer = claim_buffer or {}
-                state = claimchain.State()
-                for email, view in claim_buffer.items():
-                    self._claims[email] = view.head
-
-                for label, claim in self._claims.items():
-                    state[label] = claim
-                return state.commit(self._chain)
-
-        def update_key(self):
-            self.key = ClaimchainMode.generate_public_key()
-            self._claims['encryption_key'] = self.key
+    def update_key(self):
+        self.key += 1
 
 
 class Context(object):
@@ -155,21 +75,13 @@ class GlobalState(object):
     encrypted_email_count      = attrib(default=0)
 
     def create_local_view(self, user, friend):
-        self.local_views[(user, friend)] = DummyMode.View()
+        self.local_views[(user, friend)] = View()
 
     def create_public_view(self, user, friend):
-        mode = SimulationParams.get_default().mode
-        if mode == 'dummy':
-            self.public_views[(user, friend)] = DummyMode.View()
-        elif mode == 'claimchain':
-            self.public_views[(user, friend)] = ClaimchainMode.View()
+        self.public_views[(user, friend)] = View()
 
     def create_state(self, user):
-        mode = SimulationParams.get_default().mode
-        if mode == 'dummy':
-            self.state_by_user[user] = DummyMode.State()
-        elif mode == 'claimchain':
-            self.state_by_user[user] = ClaimchainMode.State()
+        self.state_by_user[user] = State()
 
     def eval_propagation(self, mode='key'):
         '''
@@ -185,7 +97,10 @@ class GlobalState(object):
 
         for user in self.context.userset:
             friends = self.context.social_graph[user]['friends']
-            friends = self.context.userset.intersection(friends)
+
+            # Uncomment to only have the plots in the userset
+            # friends = self.context.userset.intersection(friends)
+
             for friend in friends:
                 # Do not count links derived from emails found in the Sent directories
                 # of the users in the userset, when the sender address is not the main
@@ -216,12 +131,9 @@ class GlobalState(object):
     def record_sent_email(self, user, recipients):
         self.nb_sent_emails_by_user[user] += 1
 
-        if user not in self.context.userset:
-            return None
-
-        recipients = recipients.intersection(self.context.userset)
-        if not recipients:
-            return None
+        if user not in self.context.userset or \
+           recipients != recipients.intersection(self.context.userset):
+            return
 
         self.sent_email_count += 1
 
