@@ -165,40 +165,42 @@ class State(object):
 
 class View(object):
     def __init__(self, source_chain, source_tree=None):
-        self._chain = source_chain
-        self._block = self._chain.store[self._chain.head]
+        self.chain = source_chain
+        self._latest_block = self.chain.store[self.chain.head]
 
-        payload = Payload.from_dict(self._block.items[0])
-
+        payload = Payload.from_dict(self._latest_block.items[0])
         self._nonce = ascii2bytes(payload.nonce)
-        self._params = LocalParams.from_dict(payload.metadata)
-
+        self.params = LocalParams.from_dict(payload.metadata)
         self.tree = source_tree or Tree(
-                object_store=ObjectStore(self._chain.store),
+                object_store=ObjectStore(self.chain.store),
                 root_hash=ascii2bytes(payload.mtr_hash))
+        if ascii2bytes(payload.mtr_hash) != self.tree.root_hash:
+            raise ValueError("Supplied tree doesn't match MTR in the chain.")
 
-        assert ascii2bytes(payload.mtr_hash) == self.tree.root_hash
+    @property
+    def head(self):
+        return self.chain.head
 
     # TODO: This validation is incorrect for any block but the genesis
     def validate(self):
-        owner_sig_pk = self._params.sig.pk
-        raw_sig_backup = self._block.aux
+        owner_sig_pk = self.params.sig.pk
+        raw_sig_backup = self._latest_block.aux
         sig = ascii2pet(raw_sig_backup)
-        self._block.aux = None
-        if not verify_signature(owner_sig_pk, sig, self._block.hash()):
-            self._block.aux = raw_sig_backup
+        self._latest_block.aux = None
+        if not verify_signature(owner_sig_pk, sig, self._latest_block.hash()):
+            self._latest_block.aux = raw_sig_backup
             raise ValueError("Invalid signature.")
-        self._block.aux = raw_sig_backup
+        self._latest_block.aux = raw_sig_backup
 
     def _lookup_capability(self, claim_label):
         cap_lookup_key = get_capability_lookup_key(
-                self._params.dh.pk, self._nonce, claim_label)
+                self.params.dh.pk, self._nonce, claim_label)
         try:
             cap = self.tree[cap_lookup_key]
         except KeyError:
             raise KeyError("Label does not exist or you don't have "
                            "permission to read.")
-        return decode_capability(self._params.dh.pk, self._nonce,
+        return decode_capability(self.params.dh.pk, self._nonce,
                                  claim_label, cap)
 
     def _lookup_claim(self, claim_label, vrf_value, claim_lookup_key):
@@ -207,7 +209,7 @@ class View(object):
         except KeyError:
             raise KeyError("Claim not found, but permission to read the label "
                            "exists.")
-        return decode_claim(self._params.vrf.pk, self._nonce,
+        return decode_claim(self.params.vrf.pk, self._nonce,
                             claim_label, vrf_value, enc_claim)
 
     def __getitem__(self, claim_label):
