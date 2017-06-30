@@ -9,7 +9,7 @@ __main__.Message = Message
 
 
 parsed_logs_folder = 'Enron/parsing/'
-log_entries_lim = 1000
+log_entries_lim = 10000
 
 
 @pytest.fixture

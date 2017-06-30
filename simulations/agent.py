@@ -1,5 +1,6 @@
 import os
 import base64
+import warnings
 
 from collections import defaultdict
 
@@ -22,6 +23,8 @@ class GlobalState(object):
     def __init__(self, context):
         self.context = context
         self.agents = {}
+        self.sent_email_count = 0
+        self.encrypted_email_count = 0
         for user in self.context.senders:
             self.agents[user] = Agent(self)
 
@@ -133,7 +136,6 @@ class Agent(object):
 
             sender_chain = Chain(full_store, root_hash=head)
             self.view_buffer[sender] = View(source_chain=sender_chain)
-
 
     def _maybe_get_from_view(self, view, claim_label):
         with self.params.as_default():

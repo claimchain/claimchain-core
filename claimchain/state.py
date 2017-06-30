@@ -120,23 +120,26 @@ class State(object):
         return target_chain.head
 
     def compute_evidence_keys(self, reader_dh_pk, claim_label):
-        vrf_value = self._vrf_value_by_label[claim_label]
-        cap_lookup_key = get_capability_lookup_key(
-                reader_dh_pk, self._nonce, claim_label)
+        try:
+            vrf_value = self._vrf_value_by_label[claim_label]
+            cap_lookup_key = get_capability_lookup_key(
+                    reader_dh_pk, self._nonce, claim_label)
 
-        # Compute capability entry evidence
-        _, raw_cap_evidence = self.tree.evidence(cap_lookup_key)
-        claim_lookup_key = _compute_claim_key(vrf_value, mode='lookup')
+            # Compute capability entry evidence
+            _, raw_cap_evidence = self.tree.evidence(cap_lookup_key)
+            claim_lookup_key = _compute_claim_key(vrf_value, mode='lookup')
 
-        # Compute claim evidence
-        _, raw_claim_evidence = self.tree.evidence(claim_lookup_key)
-        object_keys = {obj.hid for obj in raw_cap_evidence} | \
-                      {obj.hid for obj in raw_claim_evidence}
+            # Compute claim evidence
+            _, raw_claim_evidence = self.tree.evidence(claim_lookup_key)
+            object_keys = {obj.hid for obj in raw_cap_evidence} | \
+                          {obj.hid for obj in raw_claim_evidence}
 
-        # Add encoded capability and encoded claim value
-        encoded_cap_hash = raw_cap_evidence[-1].item
-        encoded_claim_hash = raw_claim_evidence[-1].item
-        return object_keys | {encoded_claim_hash} | {encoded_cap_hash}
+            # Add encoded capability and encoded claim value
+            encoded_cap_hash = raw_cap_evidence[-1].item
+            encoded_claim_hash = raw_claim_evidence[-1].item
+            return object_keys | {encoded_claim_hash} | {encoded_cap_hash}
+        except KeyError:
+            return set()
 
     def clear(self):
         self._claim_content_by_label.clear()

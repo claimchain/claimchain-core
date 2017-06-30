@@ -14,7 +14,7 @@ class EncStatus(Enum):
 class SimulationParams(object):
     # Max buffer size for user after which she updates her chain.
     # If None, chains are never updated
-    chain_update_buffer_size = attrib(default=None)
+    chain_update_buffer_size = attrib(default=5)
 
     # Max number of sent emails by a user after which she updates her key.
     # If None, keys are never updated
