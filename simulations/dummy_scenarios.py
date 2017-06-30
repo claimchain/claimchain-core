@@ -184,11 +184,12 @@ class GlobalState(object):
         stale = 0
 
         for user in self.context.userset:
-            friends = self.context.userset.intersection(
-                    self.context.social_graph[user]['friends'])
+            friends = self.context.social_graph[user]['friends']
+            friends = self.context.userset.intersection(friends)
             for friend in friends:
-                # Do not count links derived from emails found in the Sent directories of the users
-                # in the userset, when the sender address is not the main one of that user
+                # Do not count links derived from emails found in the Sent directories
+                # of the users in the userset, when the sender address is not the main
+                # one of that user
                 if (user, friend) not in self.local_views:
                     continue
 
@@ -223,6 +224,7 @@ class GlobalState(object):
             return None
 
         self.sent_email_count += 1
+
         stale = False
         for recipient in recipients:
             view = self.local_views.get((user, recipient))
@@ -236,8 +238,8 @@ class GlobalState(object):
                  view.key != self.state_by_user[recipient].key:
                 stale = True
 
+        self.encrypted_email_count += 1
         if not stale:
-            self.encrypted_email_count += 1
             return EncStatus.encrypted
         else:
             return EncStatus.stale
@@ -310,9 +312,8 @@ def simulate_autocrypt(context):
         for recipient in recipients:
             if (recipient, email.From) not in global_state.local_views:
                 global_state.create_local_view(recipient, email.From)
-            if (recipient, email.From) in global_state.local_views:
-                global_state.local_views[(recipient, email.From)] \
-                        .update_from_state(sender_state)
+            global_state.local_views[(recipient, email.From)] \
+                    .update_from_state(sender_state)
 
         if index % 100 == 0:
             key_propagation_data.loc[index] = global_state.eval_propagation(mode='key')
@@ -359,17 +360,12 @@ def simulate_claimchain_no_privacy(context):
         # For all recipients, update their local dict entry for the sender
         sender_state = global_state.state_by_user[email.From]
         for recipient in recipients:
-            # If recipient hasn't heard about sender, create view
-            # TODO: Why not in global state initialization?
             if (recipient, email.From) not in global_state.local_views:
                 global_state.create_local_view(recipient, email.From)
-
-            # Update recipient's view with latest committed sender's state
-            recipient_view_of_sender = global_state.local_views.get((recipient, email.From))
-            if recipient_view_of_sender.head != sender_state.head:
-                recipient_view_of_sender.update_from_state(sender_state)
-                if recipient in context.senders:
-                    global_state.claim_buffer_by_user[recipient][email.From] = sender_state
+            global_state.local_views[(recipient, email.From)] \
+                    .update_from_state(sender_state)
+            global_state.claim_buffer_by_user[recipient][email.From] = \
+                    clone(sender_state)
 
         # Update the social graph entries of the recipients for their friends, if the sender
         # knows of a later head
@@ -382,11 +378,17 @@ def simulate_claimchain_no_privacy(context):
                     global_state.create_local_view(recipient, friend)
 
                 recipient_view_of_friend = global_state.local_views[(recipient, friend)]
-                sender_public_view_of_friend = global_state.public_views[(email.From, friend)]
+                sender_public_view_of_friend = \
+                        global_state.public_views[(email.From, friend)]
 
-                if recipient_view_of_friend.head != sender_public_view_of_friend.head:
+                if sender_public_view_of_friend.head is None:
+                    continue
+
+                if recipient_view_of_friend.head is None or \
+                   recipient_view_of_friend.head < sender_public_view_of_friend.head:
                     recipient_view_of_friend.update_from_view(sender_public_view_of_friend)
-                    global_state.claim_buffer_by_user[recipient][friend] = sender_public_view_of_friend
+                    global_state.claim_buffer_by_user[recipient][friend] =  \
+                            sender_public_view_of_friend
 
         if index % 100 == 0:
             key_propagation_data.loc[index] = global_state.eval_propagation(mode='key')
@@ -423,8 +425,8 @@ def simulate_claimchain_with_privacy(context):
     encryption_status_data = pd.Series()
 
     for index, email in enumerate(context.log):
+        recipients = email.To | email.Cc | email.Bcc - {email.From}
         public_recipients = email.To | email.Cc - {email.From}
-        recipients = public_recipients | email.Bcc - {email.From}
         for recipient in recipients:
             if (email.From, recipient) not in global_state.local_views:
                 global_state.create_local_view(email.From, recipient)
@@ -439,17 +441,13 @@ def simulate_claimchain_with_privacy(context):
 
         # For all recipients, update their local dict entry for the sender
         sender_state = global_state.state_by_user[email.From]
-        for recipient in recipients.intersection(context.senders):
-
-            # If recipient hasn't heard about sender, create view
+        for recipient in recipients:
             if (recipient, email.From) not in global_state.local_views:
                 global_state.create_local_view(recipient, email.From)
-
-            # Update recipient's view with latest committed sender's state
-            recipient_view_of_sender = global_state.local_views.get((recipient, email.From))
-            if recipient_view_of_sender.head != sender_state.head:
-                recipient_view_of_sender.update_from_state(sender_state)
-                global_state.claim_buffer_by_user[recipient][email.From] = sender_state
+            global_state.local_views[(recipient, email.From)] \
+                    .update_from_state(sender_state)
+            global_state.claim_buffer_by_user[recipient][email.From] = \
+                    clone(sender_state)
 
         # Update introductions
         if email.From not in introductions:
@@ -474,11 +472,17 @@ def simulate_claimchain_with_privacy(context):
                     global_state.create_local_view(recipient, friend)
 
                 recipient_view_of_friend = global_state.local_views[(recipient, friend)]
-                sender_public_view_of_friend = global_state.public_views[(email.From, friend)]
+                sender_public_view_of_friend = \
+                        global_state.public_views[(email.From, friend)]
 
-                if recipient_view_of_friend.head != sender_public_view_of_friend.head:
+                if sender_public_view_of_friend.head is None:
+                    continue
+
+                if recipient_view_of_friend.head is None or \
+                   recipient_view_of_friend.head < sender_public_view_of_friend.head:
                     recipient_view_of_friend.update_from_view(sender_public_view_of_friend)
-                    global_state.claim_buffer_by_user[recipient][friend] = sender_public_view_of_friend
+                    global_state.claim_buffer_by_user[recipient][friend] = \
+                            sender_public_view_of_friend
 
         if index % 100 == 0:
             key_propagation_data.loc[index] = global_state.eval_propagation(mode='key')

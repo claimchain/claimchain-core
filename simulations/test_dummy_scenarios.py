@@ -5,7 +5,7 @@ import pickle
 
 import numpy as np
 
-from .scenarios import *
+from .dummy_scenarios import *
 from .parse_enron import Message
 
 import __main__
@@ -13,7 +13,10 @@ __main__.Message = Message
 
 
 parsed_logs_folder = 'Enron/parsing/'
-log_entries_lim = 1000
+log_entries_lim = 10000
+
+
+update_chain_thresh = 0
 
 
 @pytest.fixture
@@ -62,7 +65,7 @@ def test_eval_propagation(context, mode, default_params):
 
 @pytest.mark.parametrize('params', [
         SimulationParams(key_update_every_nb_sent_emails=None),
-        SimulationParams(key_update_every_nb_sent_emails=1),
+        SimulationParams(key_update_every_nb_sent_emails=update_chain_thresh),
     ])
 def test_autocrypt_stale_propagation(context, params):
     with params.as_default():
@@ -77,8 +80,8 @@ def test_autocrypt_stale_propagation(context, params):
 
 
 @pytest.mark.parametrize('params,any_stale_keys', [
-        (SimulationParams(chain_update_buffer_size=10, key_update_every_nb_sent_emails=None), False),
-        (SimulationParams(chain_update_buffer_size=10, key_update_every_nb_sent_emails=5), True),
+        (SimulationParams(chain_update_buffer_size=update_chain_thresh, key_update_every_nb_sent_emails=None), False),
+        (SimulationParams(chain_update_buffer_size=update_chain_thresh, key_update_every_nb_sent_emails=5), True),
     ])
 def test_claimchain_no_privacy_propagation(context, params, any_stale_keys):
     with params.as_default():
@@ -92,8 +95,8 @@ def test_claimchain_no_privacy_propagation(context, params, any_stale_keys):
 
 
 @pytest.mark.parametrize('params,any_stale_keys', [
-        (SimulationParams(chain_update_buffer_size=10, key_update_every_nb_sent_emails=None), False),
-        (SimulationParams(chain_update_buffer_size=10, key_update_every_nb_sent_emails=5), True)
+        (SimulationParams(chain_update_buffer_size=update_chain_thresh, key_update_every_nb_sent_emails=None), False),
+        (SimulationParams(chain_update_buffer_size=update_chain_thresh, key_update_every_nb_sent_emails=5), True)
     ])
 def test_claimchain_with_privacy_propagation(context, params, any_stale_keys):
     with params.as_default():
