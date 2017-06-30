@@ -2,18 +2,11 @@ import os
 import base64
 
 from collections import defaultdict
-from enum import Enum
 
-from attr import attrs, attrib
 from hippiehug import Chain
 from claimchain import State, View, LocalParams
-from defaultcontext import with_default_context
 
-
-class EncStatus(Enum):
-    plaintext = 0
-    stale = 1
-    encrypted = 2
+from .utils import SimulationParams
 
 
 # Instead of using string 'public' as a shared secret for
@@ -25,24 +18,18 @@ ENC_KEY_LABEL = 'my_encryption_key'
 PUBLIC_READER_LABEL = 'public'
 
 
-@with_default_context(use_empty_init=True)
-@attrs
-class SimulationParams(object):
-    # Max buffer size for user after which she updates her chain.
-    # If None, chains are never updated
-    chain_update_buffer_size = attrib(default=None)
-
-    # Max number of sent emails by a user after which she updates her key.
-    # If None, keys are never updated
-    key_update_every_nb_sent_emails = attrib(default=None)
-
-
-@attrs
 class GlobalState(object):
-    pass
+    def __init__(self, context):
+        self.context = context
+        self.agents = {}
+        for user in self.context.senders:
+            self.agents[user] = Agent(self)
 
 
 class Agent(object):
+    '''
+    Simulated claimchain user in the online deployment mode.
+    '''
     def __init__(self, global_state):
         self.global_state = global_state
         self.params = LocalParams.generate()
@@ -82,7 +69,7 @@ class Agent(object):
         else:
             self.cap_buffer[reader].add(claim_label)
 
-    def send_email(self, recipients):
+    def send_message(self, recipients):
         with self.params.as_default():
             relevant_object_keys = set()
             for recipient in recipients:
@@ -136,7 +123,7 @@ class Agent(object):
             self.nb_sent_emails += 1
             return self.chain.head, email_store
 
-    def receive_email(self, sender, head, email_store):
+    def receive_message(self, sender, head, email_store):
         with self.params.as_default():
             email_store = dict(email_store)
             sender_chain = Chain(email_store, root_hash=head)
