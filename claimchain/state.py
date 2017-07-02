@@ -25,20 +25,32 @@ PROTOCOL_VERSION = 1
 
 
 @attrs
+class Metadata(object):
+    params = attrib()
+    identity_info = attrib(default=None)
+
+
+@attrs
 class Payload(object):
-    metadata = attrib()
-    mtr_hash = attrib()
-    nonce = attrib(default=False)
+    mtr_hash  = attrib()
+    metadata  = attrib()
+    nonce     = attrib(default=False)
     timestamp = attrib(default=Factory(lambda: str(datetime.utcnow())))
-    version = attrib(default=PROTOCOL_VERSION)
+    version   = attrib(default=PROTOCOL_VERSION)
 
     @staticmethod
-    def build(tree, nonce=None):
-        return Payload(nonce=bytes2ascii(nonce),
-                       metadata=LocalParams.get_default().public_export(),
+    def build(tree, identity_info=None, nonce=None):
+        metadata = Metadata(
+                params=LocalParams.get_default().public_export(),
+                identity_info=identity_info)
+        return Payload(metadata=metadata,
+                       nonce=bytes2ascii(nonce),
                        mtr_hash=bytes2ascii(tree.root_hash))
+
     @staticmethod
     def from_dict(exported):
+        raw_metadata = exported["metadata"]
+        exported["metadata"] = Metadata(**raw_metadata)
         return Payload(**exported)
 
     def export(self):
@@ -170,14 +182,13 @@ class View(object):
     def __init__(self, source_chain, source_tree=None):
         self.chain = source_chain
         self._latest_block = self.chain.store[self.chain.head]
-
-        payload = Payload.from_dict(self._latest_block.items[0])
-        self._nonce = ascii2bytes(payload.nonce)
-        self.params = LocalParams.from_dict(payload.metadata)
+        self._payload = Payload.from_dict(self._latest_block.items[0])
+        self._nonce = ascii2bytes(self._payload.nonce)
+        self._params = LocalParams.from_dict(self._payload.metadata.params)
         self.tree = source_tree or Tree(
                 object_store=ObjectStore(self.chain.store),
-                root_hash=ascii2bytes(payload.mtr_hash))
-        if ascii2bytes(payload.mtr_hash) != self.tree.root_hash:
+                root_hash=ascii2bytes(self._payload.mtr_hash))
+        if ascii2bytes(self._payload.mtr_hash) != self.tree.root_hash:
             raise ValueError("Supplied tree doesn't match MTR in the chain.")
 
     @property
@@ -186,7 +197,7 @@ class View(object):
 
     # TODO: This validation is incorrect for any block but the genesis
     def validate(self):
-        owner_sig_pk = self.params.sig.pk
+        owner_sig_pk = self._params.sig.pk
         raw_sig_backup = self._latest_block.aux
         sig = ascii2pet(raw_sig_backup)
         self._latest_block.aux = None
@@ -197,13 +208,13 @@ class View(object):
 
     def _lookup_capability(self, claim_label):
         cap_lookup_key = get_capability_lookup_key(
-                self.params.dh.pk, self._nonce, claim_label)
+                self._params.dh.pk, self._nonce, claim_label)
         try:
             cap = self.tree[cap_lookup_key]
         except KeyError:
             raise KeyError("Label does not exist or you don't have "
                            "permission to read.")
-        return decode_capability(self.params.dh.pk, self._nonce,
+        return decode_capability(self._params.dh.pk, self._nonce,
                                  claim_label, cap)
 
     def _lookup_claim(self, claim_label, vrf_value, claim_lookup_key):
@@ -212,7 +223,7 @@ class View(object):
         except KeyError:
             raise KeyError("Claim not found, but permission to read the label "
                            "exists.")
-        return decode_claim(self.params.vrf.pk, self._nonce,
+        return decode_claim(self._params.vrf.pk, self._nonce,
                             claim_label, vrf_value, enc_claim)
 
     def __getitem__(self, claim_label):
