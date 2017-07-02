@@ -73,10 +73,11 @@ def _sign_block(block):
 
 
 class State(object):
-    def __init__(self):
+    def __init__(self, identity_info=None):
+        self.identity_info = identity_info
+
         self._claim_content_by_label = {}
         self._caps_by_reader_pk = defaultdict(set)
-
         self._enc_items_map = {}
         self._vrf_value_by_label = {}
         self._payload = None
@@ -121,8 +122,11 @@ class State(object):
         tree = _build_tree(tree_store, enc_items_map)
 
         # Construct payload
-        payload = Payload.build(tree=tree, nonce=nonce).export()
-        target_chain.multi_add([payload], pre_commit_fn=_sign_block)
+        payload = Payload.build(
+                tree=tree,
+                identity_info=self.identity_info,
+                nonce=nonce)
+        target_chain.multi_add([payload.export()], pre_commit_fn=_sign_block)
 
         self._payload = payload
         self._tree = tree
