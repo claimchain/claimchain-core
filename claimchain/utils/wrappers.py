@@ -186,7 +186,8 @@ class Tree(object):
                 raise TypeError('Value is not a valid object.')
             self.tree.store[value.hid] = value
 
-        self.tree.multi_add(list(items.values()), list(items.keys()))
+        if len(items) > 0:
+            self.tree.multi_add(list(items.values()), list(items.keys()))
 
     def __contains__(self, lookup_key):
         lookup_key = ensure_binary(lookup_key)

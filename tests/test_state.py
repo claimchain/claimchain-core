@@ -3,7 +3,7 @@ import pytest
 import hippiehug
 from petlib.pack import encode, decode
 
-from claimchain.state import State, View
+from claimchain.state import State, View, Payload
 from claimchain.core import get_capability_lookup_key
 from claimchain.core import _compute_claim_key, _salt_label
 from claimchain.crypto import PublicParams, LocalParams, compute_vrf
@@ -20,6 +20,12 @@ def local_params():
 @pytest.fixture
 def state():
     return State()
+
+
+def test_build_empty_payload():
+    tree = Tree()
+    payload = Payload.build(tree, b'nonce')
+    assert payload.mtr_hash is None
 
 
 def test_add_claim(state):
