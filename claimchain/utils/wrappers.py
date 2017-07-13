@@ -28,22 +28,41 @@ class ObjectStore(object):
     b'test'
     """
     def __init__(self, backend=None):
-        self.backend = backend
+        self._backend = backend
         if backend is None:
-            self.backend = {}
+            self._backend = {}
+
+        for lookup_key, value in self._backend.items():
+            _check_hash(lookup_key, value)
 
     def __getitem__(self, lookup_key):
-        value = self.backend[lookup_key]
+        value = self._backend[lookup_key]
         _check_hash(lookup_key, value)
         return value
 
+    def get(self, lookup_key):
+        try:
+            return self._backend[lookup_key]
+        except KeyError:
+            return None
+
     def __setitem__(self, lookup_key, value):
         _check_hash(lookup_key, value)
-        self.backend[lookup_key] = value
+        self._backend[lookup_key] = value
+
+    def keys(self):
+        return self._backend.keys()
+
+    def values(self):
+        return self._backend.values()
+
+    def items(self):
+        return self._backend.items()
 
     def add(self, value):
         lookup_key = value.hid
-        self.backend[lookup_key] = value
+        self._backend[lookup_key] = value
+
 
 
 # TODO: (Higher priority) move this to hippiehug classes themselves
