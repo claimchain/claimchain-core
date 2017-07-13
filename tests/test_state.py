@@ -22,10 +22,18 @@ def state():
     return State()
 
 
-def test_build_empty_payload():
-    tree = Tree()
-    payload = Payload.build(tree, b'nonce')
+def test_build_payload(local_params):
+    payload = Payload.build(Tree(), b'nonce')
     assert payload.mtr_hash is None
+
+
+def test_parse_payload(local_params):
+    payload = Payload.build(Tree(), b'nonce')
+    exported = payload.export()
+    payload1 = Payload.from_dict(exported)
+
+    # Check if original dicitonary is not parsed
+    assert isinstance(exported['metadata'], dict)
 
 
 def test_add_claim(state):

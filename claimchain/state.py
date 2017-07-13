@@ -51,12 +51,12 @@ class Payload(object):
                        mtr_hash=mtr_hash,
                        nonce=bytes2ascii(nonce))
 
-
     @staticmethod
     def from_dict(exported):
         raw_metadata = exported["metadata"]
-        exported["metadata"] = Metadata(**raw_metadata)
-        return Payload(**exported)
+        raw_payload = dict(exported)
+        raw_payload['metadata'] = Metadata(**raw_metadata)
+        return Payload(**raw_payload)
 
     def export(self):
         return asdict(self)
