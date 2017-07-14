@@ -74,26 +74,30 @@ def test_agent_chain_update():
     # Alice -> Bob, and Carol in CC
     alice_head0 = alice.head
     message_metadata = alice.send_message(['bob', 'carol'])
+    # Alice updates her chain, because she learned about Carol
     assert alice.head != alice_head0
 
     bob.receive_message('alice', message_metadata,
                         other_recipients=['carol'])
 
-    # Bob has learned about Alice...
-    assert bob.get_latest_view('alice').head == alice.head
-    # ...but not about Carol
-    assert bob.get_latest_view('carol') is None
-
     # Bob -> Alice
+    bob_head0 = bob.head
     message_metadata = bob.send_message(['alice'])
+    # TODO: Is this expected?
+    assert bob.head == bob_head0
+
     alice.receive_message('bob', message_metadata)
 
     # Alice -> Bob once again
+    alice_head1 = alice.head
     message_metadata = alice.send_message(['bob'])
+    # Alice learned about Bob's head, so she updates
+    assert alice.head != alice_head1
+
     bob.receive_message('alice', message_metadata)
 
-    # Bob has learned about both Alice and Carol
-    # TODO: Bob received Carol's stuff, but disregarded back then
-    #       Alice didn't send anything since.
-    assert bob.get_latest_view('alice').head == alice.head
-    assert bob.get_latest_view('carol').head == carol.head
+    # Bob -> Alice once again
+    bob_head1 = bob.head
+    message_metadata = bob.send_message(['alice'])
+    # TODO: Is this expected?
+    assert bob.head == bob_head1
