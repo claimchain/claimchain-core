@@ -57,8 +57,6 @@ def test_agent_cross_references():
     bob.receive_message('alice', message_metadata)
 
     # Bob has learned about both Alice and Carol
-    # TODO: Bob received Carol's stuff, but disregarded back then
-    #       Alice didn't send anything since.
     assert bob.get_latest_view('alice').head == alice.head
     assert bob.get_latest_view('carol').head == carol.head
 
