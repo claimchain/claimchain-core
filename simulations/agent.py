@@ -26,7 +26,7 @@ class GlobalState(object):
         self.sent_email_count = 0
         self.encrypted_email_count = 0
         for user in self.context.senders:
-            self.agents[user] = Agent(self)
+            self.agents[user] = Agent(user)
 
 
 def latest_timestamp_resolution_policy(views):
@@ -34,14 +34,48 @@ def latest_timestamp_resolution_policy(views):
     return max(views, key=lambda view: view.payload.timestamp)
 
 
+def immediate_chain_update_policy(agent, recipients):
+    # Check if any of the contacts or capability entries
+    # that are relevant to the current message have
+    # been updated. If yes, commit new block with the updates
+    # before sending the message.
+    # NOTE: This assumes that claims contain heads
+
+    # * Update chain if any public cap needs to be updated
+    if len(agent.queued_caps[PUBLIC_READER_LABEL]) > 0:
+        return True
+
+    public_contacts = agent.committed_caps[PUBLIC_READER_LABEL]
+
+    # * Update chain if any relevant private cap needs to be updated
+    for recipient in recipients:
+        if len(agent.queued_caps[recipient]) > 0:
+            return True
+
+    private_contacts = set()
+    for recipient in recipients:
+        private_contacts.update(agent.committed_caps[recipient])
+
+    # * Update chain if any contact that is to be shared in this
+    # message was updated.
+    relevant_contacts = private_contacts | public_contacts
+    if len(relevant_contacts.intersection(agent.queued_views)) > 0:
+        return True
+
+
 class Agent(object):
     '''
     Simulated claimchain user in the online deployment mode.
     '''
-    def __init__(self, global_state, conflict_resolution_policy=None):
-        self.global_state = global_state
+    def __init__(self, email,
+                 conflict_resolution_policy=None,
+                 chain_update_policy=None):
+
+        self.email = email
         self.conflict_resolution_policy = conflict_resolution_policy \
                 or latest_timestamp_resolution_policy
+        self.chain_update_policy = chain_update_policy \
+                or immediate_chain_update_policy
 
         self.params = LocalParams.generate()
         self.chain_store = ObjectStore()
@@ -54,7 +88,7 @@ class Agent(object):
         self.committed_caps = defaultdict(set)
         self.committed_views = {}
         self.queued_identity_info = None
-        self.queued_caps = {}
+        self.queued_caps = defaultdict(set)
         self.queued_views = {}
 
         self.global_views = defaultdict(dict)
@@ -80,41 +114,34 @@ class Agent(object):
         # 4096 random bits in base64
         return base64.b64encode(os.urandom(4096 // 8))
 
-    def add_expected_reader(self, reader, claim_labels):
+    def add_expected_reader(self, reader, contacts):
         if reader not in self.queued_caps:
-            self.queued_caps[reader] = set(claim_labels)
+            self.queued_caps[reader] = set(contacts)
         else:
-            self.queued_caps[reader].update(claim_labels)
+            self.queued_caps[reader].update(contacts)
 
     def get_latest_view(self, contact):
         policy = self.conflict_resolution_policy
 
         # Collect possible candidates
-        latest_block_candidates = {}
         current_views = dict(self.committed_views)
         current_views.update(self.queued_views)
-        for friend, view in current_views.items():
-            if friend == contact:
-                continue
-
-            contact_head_candidate = self.get_contact_head_from_view(
-                    view, contact)
-            if contact_head_candidate is None:
-                continue
-            contact_latest_block_candidate = \
-                    self.global_store[contact_latest_block_candidate]
-            latest_block_candidates[contact_head_candidate] = \
-                    contact_latest_block_candidate
-
-        # Compute candidates views
         candidate_views = set()
         if contact in current_views:
             candidate_views.add(current_views[contact])
-        for head_hash, latest_block in latest_block_candidates.items():
-            chain = hippiehug.Chain(self.global_store, head=head_hash)
-            candidate_views.add(View(chain))
 
-        # Resolve conflicts using a policy
+        for friend in current_views:
+            if friend == contact:
+                continue
+            candidate_view = self.global_views[friend].get(contact)
+            if candidate_view is not None:
+                candidate_views.add(candidate_view)
+
+        # If no candidates, return None
+        if len(candidate_views) == 0:
+            return None
+
+        # Otherwise, resolve conflicts using a policy
         view = policy(candidate_views)
         committed_view = self.committed_views.get(contact)
         if committed_view is not None and committed_view.head != view.head:
@@ -124,48 +151,27 @@ class Agent(object):
     def send_message(self, recipients):
         if len(recipients) == 0:
             return
+        if not isinstance(recipients, set):
+            recipients = set(recipients)
 
         with self.params.as_default():
+            # TODO: Make an introduction policy
+            for recipient in recipients - {self.email}:
+                others = recipients - {self.email, recipient}
+                self.add_expected_reader(recipient, others)
+
+            policy = self.chain_update_policy
+            if policy(self, recipients):
+                self.update_chain()
+
             local_object_keys = set()
             global_object_keys = set()
-
-            # Check if any of the contacts or capability entries
-            # that are relevant to the current message have
-            # been updated. If yes, commit new block with the updates
-            # before sending the message.
-            # NOTE: This assumes that claims contain heads
-
-            # TODO: This should be an update chain policy
-
-            # # * Update chain if any public cap needs to be updated
-            # if len(self.queued_caps[PUBLIC_READER_LABEL]) > 0:
-            #     self.update_chain()
-            public_contacts = self.committed_caps[PUBLIC_READER_LABEL]
-
-            # # * Update chain if any relevant private cap needs to be updated
-            # for recipient in recipients:
-            #     for cap in self.queued_caps[recipient])
-            #         self.update_chain()
-            #         break
-
-            private_contacts = set()
-            for recipient in recipients:
-                private_contacts.update(self.committed_caps[recipient])
-
-            # # * Update chain if any contact that is to be shared in this
-            # # message was updated.
-            # relevant_contacts = private_contacts | public_contacts
-            # # Resolve heads for all the contacts to be shared
-            # for contact in relevant_contacts:
-            #     _ = self.get_view(contact)
-
-            # # If any were resolved to new versions, update chain
-            # if len(relevant_contacts.intersection(self.queued_views)) > 0:
-            #     self.update_chain()
 
             # Add own chain blocks
             # NOTE: Requires that chain and tree use separate stores
             local_object_keys.update(self.chain_store.keys())
+
+            public_contacts = self.committed_caps[PUBLIC_READER_LABEL]
 
             # Add evidence for public claims
             for contact in public_contacts:
@@ -223,42 +229,49 @@ class Agent(object):
             self.nb_sent_emails += 1
             return self.chain.head, public_contacts, message_store
 
-    def get_accessible_contacts(self, sender, recipient, message_metadata,
+    def get_accessible_contacts(self, sender, message_metadata,
                                 other_recipients=None):
+        # NOTE: Assumes other people's introduction policy is the same
         contacts = self.contacts_by_sender[sender]
         sender_head, public_contacts, message_store = message_metadata
-        other_recipients = set(other_recipients) - {sender, recipient}
+        other_recipients = set(other_recipients) - {sender, self.email}
         for recipient in other_recipients | public_contacts:
             contacts.add(recipient)
         return contacts
 
-    def receive_message(self, sender, recipient, message_metadata,
+    def receive_message(self, sender, message_metadata,
                         other_recipients=None):
         sender_head, public_contacts, message_store = message_metadata
         if other_recipients is None:
             other_recipients = set()
         with self.params.as_default():
-            sender_latest_block = message_store[sender_head]
+            # Merge stores temporarily
+            merged_store = ObjectStore(self.global_store)
+            for key, obj in message_store.items():
+                merged_store[key] = obj
+
+            sender_latest_block = merged_store[sender_head]
             self.global_store[sender_head] = sender_latest_block
-            sender_chain = Chain(message_store, root_hash=sender_head)
-            self.queued_views[sender] = View(sender_chain)
+            self.queued_views[sender] = View(
+                    Chain(self.global_store, root_hash=sender_head))
+            full_sender_view = View(
+                    Chain(merged_store, root_hash=sender_head))
 
             # Add relevant objects from the message store
-            object_keys_to_copy = {sender_head}
             contacts = self.get_accessible_contacts(
-                    sender, recipient, message_metadata, other_recipients)
+                    sender, message_metadata, other_recipients)
             for contact in contacts:
                 contact_head = self.get_contact_head_from_view(
-                        sender_view, contact)
+                        full_sender_view, contact)
                 if contact_head is None:
                     continue
-                object_keys_to_copy.add(contact_head)
-                self.global_views[sender][contact] = contact_head
+                contact_latest_block = message_store.get(contact_head)
+                if contact_latest_block is not None:
+                    self.global_store[contact_head] = contact_latest_block
 
-            for object_key in object_keys_to_copy:
-                block = message_store.get(object_key)
-                if block is not None:
-                    self.global_store[object_key] = block
+                # NOTE: Assumes people send only contacts' latest blocks
+                contact_chain = Chain(self.global_store, root_hash=contact_head)
+                self.global_views[sender][contact] = View(contact_chain)
 
             # Recompute the latest beliefs
             for contact in {sender} | contacts:
@@ -285,7 +298,10 @@ class Agent(object):
             # Get capabilities in the capability buffer into the claimchain
             # state, for those subjects whose keys are known.
             added_caps = []
-            for friend, labels in self.queued_caps.items():
+            for friend, contacts in self.queued_caps.items():
+                if len(contacts) == 0:
+                    continue
+
                 friend_dh_pk = None
                 # If the buffer is for the public 'reader'
                 if friend == PUBLIC_READER_LABEL:
@@ -293,13 +309,13 @@ class Agent(object):
 
                 # Else try to find the DH key in views
                 else:
-                    view = self.get_latest_block(friend)
+                    view = self.get_latest_view(friend)
                     if view is not None:
                         friend_dh_pk = view.params.dh.pk
 
                 if friend_dh_pk is not None:
-                    self.state.grant_access(friend_dh_pk, labels)
-                    self.committed_caps[friend].update(labels)
+                    self.state.grant_access(friend_dh_pk, contacts)
+                    self.committed_caps[friend].update(contacts)
                     added_caps.append(friend)
 
             # Add the latest encryption key
@@ -310,7 +326,7 @@ class Agent(object):
             head = self.state.commit(target_chain=self.chain,
                     tree_store=self.tree_store)
 
-            # Flush the view and caps buffers
+            # Flush the view and caps buffers and update current state
             for friend, view in self.queued_views.items():
                 self.committed_views[friend] = view
             self.queued_views.clear()

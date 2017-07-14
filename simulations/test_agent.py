@@ -11,77 +11,91 @@ def global_state(context):
     return GlobalState(context)
 
 
-def make_agent(global_state):
-    return Agent(global_state)
+def test_agent_send_and_receive_email():
+    alice = Agent('alice')
+    bob = Agent('bob')
+
+    message_metadata = alice.send_message(['bob'])
+    bob.receive_message('alice', message_metadata)
+
+    assert alice.get_latest_view('bob') is None
+    assert bob.get_latest_view('alice').head == alice.head
+
+    message_metadata = bob.send_message(['alice'])
+    alice.receive_message('bob', message_metadata)
+
+    assert alice.get_latest_view('bob').head == bob.head
+    assert bob.get_latest_view('alice').head == alice.head
 
 
-def test_agent_send_and_receive_email(global_state):
-    alice = make_agent(global_state)
-    bob = make_agent(global_state)
-    carol = make_agent(global_state)
+def test_agent_cross_references():
+    alice = Agent('alice')
+    bob = Agent('bob')
+    carol = Agent('carol')
 
     # Carol -> Alice
-    # Alice -> Carol
+    # Alice learns about Carol
     message_metadata = carol.send_message(['alice'])
-    alice.receive_message('carol', 'alice', message_metadata)
+    alice.receive_message('carol', message_metadata)
 
-    message_metadata=carol.send_message('carol')
-    carol.receive_message('alice', 'carol', message_metadata)
+    # Alice -> Bob, and Carol in CC
+    message_metadata = alice.send_message(['bob', 'carol'])
+    bob.receive_message('alice', message_metadata,
+                        other_recipients=['carol'])
 
-    # Now Carol's stuff is in Alice's local store
-    assert alice.get_latest_view('carol') is not None
+    # Bob has learned about Alice...
+    assert bob.get_latest_view('alice').head == alice.head
+    # ...but not about Carol
+    assert bob.get_latest_view('carol') is None
+
+    # Bob -> Alice
+    message_metadata = bob.send_message(['alice'])
+    alice.receive_message('bob', message_metadata)
+
+    # Alice -> Bob once again
+    message_metadata = alice.send_message(['bob'])
+    bob.receive_message('alice', message_metadata)
+
+    # Bob has learned about both Alice and Carol
+    # TODO: Bob received Carol's stuff, but disregarded back then
+    #       Alice didn't send anything since.
+    assert bob.get_latest_view('alice').head == alice.head
+    assert bob.get_latest_view('carol').head == carol.head
 
 
-# def test_agent_send_and_receive_email(global_state):
-#     alice = make_agent(global_state)
-#     bob = make_agent(global_state)
-#     carol = make_agent(global_state)
+def test_agent_chain_update():
+    alice = Agent('alice')
+    bob = Agent('bob')
+    carol = Agent('carol')
 
-#     carol_head, email_store = carol.send_message(['alice@test.com'])
-#     alice.receive_message('carol@test.com', carol_head, email_store)
+    # Carol -> Alice
+    # Alice learns about Carol
+    message_metadata = carol.send_message(['alice'])
+    alice.receive_message('carol', message_metadata)
 
-#     alice_head_1, accessible_labels, email_store = \
-#             alice.send_message(['bob@test.com'])
-#     assert alice_head_1 is not None
+    # Alice -> Bob, and Carol in CC
+    alice_head0 = alice.head
+    message_metadata = alice.send_message(['bob', 'carol'])
+    assert alice.head != alice_head0
 
-#     # Alice's encryption key is public
-#     with PUBLIC_READER_PARAMS.as_default():
-#         chain = Chain(email_store, root_hash=alice_head_1)
-#         view = View(chain)
-#         key = view[ENC_KEY_LABEL]
-#         assert key is not None
+    bob.receive_message('alice', message_metadata,
+                        other_recipients=['carol'])
 
-#     bob.receive_message('alice@test.com', alice_head_1, email_store)
-#     assert 'alice@test.com' in bob.view_buffer
+    # Bob has learned about Alice...
+    assert bob.get_latest_view('alice').head == alice.head
+    # ...but not about Carol
+    assert bob.get_latest_view('carol') is None
 
-#     # Bob can't read the claim yet
-#     with pytest.raises(KeyError), bob.params.as_default():
-#         bob.view_buffer['alice@test.com']['carol@test.com']
+    # Bob -> Alice
+    message_metadata = bob.send_message(['alice'])
+    alice.receive_message('bob', message_metadata)
 
-#     alice.add_expected_reader('bob@test.com', ['carol@test.com'])
-#     alice.maybe_update_chain(force=True)
-#     alice_head_2, email_store = alice.send_message(['bob@test.com'])
+    # Alice -> Bob once again
+    message_metadata = alice.send_message(['bob'])
+    bob.receive_message('alice', message_metadata)
 
-#     bob.receive_message('alice@test.com', alice_head_2, email_store)
-#     assert bob.view_buffer['alice@test.com'].chain.head != alice_head_1
-
-#     # Even though Alice added Bob as expected reader, he still
-#     # can't read the claim
-#     with pytest.raises(KeyError), bob.params.as_default():
-#         bob.view_buffer['alice@test.com']['carol@test.com']
-
-#     # But as soon as Alice gets a response from Bob, she'll be able
-#     # to get his DH key and encode the capabilities.
-#     bob_head_1, email_store = bob.send_message(['alice@test.com'])
-#     assert bob_head_1 is not None
-#     alice.receive_message('bob@test.com', bob_head_1, email_store)
-#     alice.maybe_update_chain(force=True)
-#     alice_head_3, email_store = alice.send_message(['bob@test.com'])
-#     bob.receive_message('alice@test.com', alice_head_3, email_store)
-
-#     # Now Bob can read the claim
-#     with bob.params.as_default():
-#         assert bob.view_buffer['alice@test.com']['carol@test.com'] == carol.head
-
-#     assert len(bob.stores['alice@test.com']) > 0
-#     assert len(alice.sent_email_store_cache['bob@test.com']) > 0
+    # Bob has learned about both Alice and Carol
+    # TODO: Bob received Carol's stuff, but disregarded back then
+    #       Alice didn't send anything since.
+    assert bob.get_latest_view('alice').head == alice.head
+    assert bob.get_latest_view('carol').head == carol.head
