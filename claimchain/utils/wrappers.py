@@ -32,8 +32,14 @@ class ObjectStore(object):
         if backend is None:
             self._backend = {}
 
-        for lookup_key, value in self._backend.items():
-            _check_hash(lookup_key, value)
+        # Check hashes if it is a plain dictionary
+        if not isinstance(self._backend, ObjectStore):
+            for lookup_key, value in self._backend.items():
+                _check_hash(lookup_key, value)
+        else:
+            # If input is another ObjectStore, unwrap the
+            # underlying dictionary
+            self._backend = self._backend._backend
 
     def __getitem__(self, lookup_key):
         value = self._backend[lookup_key]
