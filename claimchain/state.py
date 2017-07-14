@@ -194,12 +194,13 @@ class View(object):
         self.chain = source_chain
         self._latest_block = self.chain.store[self.chain.head]
         self._nonce = ascii2bytes(self.payload.nonce)
-        self.tree = source_tree or Tree(
-                object_store=ObjectStore(self.chain.store),
-                root_hash=ascii2bytes(self.payload.mtr_hash))
+        if self.payload.mtr_hash is not None:
+            self.tree = source_tree or Tree(
+                    object_store=ObjectStore(self.chain.store),
+                    root_hash=ascii2bytes(self.payload.mtr_hash))
 
-        if ascii2bytes(self.payload.mtr_hash) != self.tree.root_hash:
-            raise ValueError("Supplied tree doesn't match MTR in the chain.")
+            if ascii2bytes(self.payload.mtr_hash) != self.tree.root_hash:
+                raise ValueError("Supplied tree doesn't match MTR in the chain.")
 
     @property
     def head(self):
@@ -232,6 +233,8 @@ class View(object):
         except KeyError:
             raise KeyError("Label does not exist or you don't have "
                            "permission to read.")
+        except AttributeError:
+            raise ValueError("The chain does not have a claim map.")
         return decode_capability(self.params.dh.pk, self._nonce,
                                  claim_label, cap)
 
@@ -241,6 +244,8 @@ class View(object):
         except KeyError:
             raise KeyError("Claim not found, but permission to read the label "
                            "exists.")
+        except AttributeError:
+            raise ValueError("The chain does not have a claim map.")
         return decode_claim(self.params.vrf.pk, self._nonce,
                             claim_label, vrf_value, enc_claim)
 
@@ -254,6 +259,8 @@ class View(object):
             return self[claim_label]
         except KeyError:
             return None
+        except ValueError:
+            return None
 
     def __hash__(self):
-        return self.head
+        return hash(self.head)
