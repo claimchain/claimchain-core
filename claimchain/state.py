@@ -1,6 +1,6 @@
 import os
 import warnings
-from datetime import datetime
+from time import time
 from base64 import b64encode
 from hashlib import sha256
 from collections import defaultdict
@@ -35,7 +35,7 @@ class Payload(object):
     mtr_hash  = attrib()
     metadata  = attrib()
     nonce     = attrib(default=False)
-    timestamp = attrib(default=Factory(lambda: datetime.utcnow().timestamp()))
+    timestamp = attrib(default=Factory(lambda: time()))
     version   = attrib(default=PROTOCOL_VERSION)
 
     @staticmethod
