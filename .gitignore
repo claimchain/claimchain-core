@@ -1,5 +1,10 @@
 .tox
 
+build
+dist
+*.egg-info
+.eggs
+
 venv
 *.pyc
 .cache
