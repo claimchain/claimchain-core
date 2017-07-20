@@ -2,6 +2,9 @@
 ClaimChain
 **********
 
+.. image:: https://travis-ci.org/gdanezis/claimchain-core.svg?branch=master
+   :target: https://travis-ci.org/gdanezis/claimchain-core
+
 A core and experimental implementation of ClaimChain, decentralized Public Key Infrastructure.
 
 
