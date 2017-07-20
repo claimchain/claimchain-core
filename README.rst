@@ -10,7 +10,7 @@ Installing
 
 For the moment, the package needs to be installed manually from Github::
 
-    git clone [...] claimchain && cd claimchain
+    git clone git@github.com:gdanezis/claimchain-core.git claimchain && cd claimchain
     pip install -r requirements/base.txt
     pip install -e .
 
@@ -32,10 +32,10 @@ Usage
 
 High-level interface for ClaimChain consists of two classes, ``State`` for building claimchains, and ``View`` for parsing and interpreting claimchains.
 
-Constructing the state
-----------------------
+Building chains
+---------------
 
-The core abstraction for the owner is a `state`. The `state` contains information about the owner, and claims the owner makes about other users or objects. Currently, this package only supports private claims, which means the owner needs to explicitly make every claim readable by intended readers. Once the `state` is constructed it can be committed to the chain.
+The core abstraction for the a ClaimChain user is a `state`. The `state` contains information about the user, and claims they make about other users or objects. Currently, this package only supports private claims, which means the owner of a chain needs to explicitly make every claim readable by intended readers. Once the `state` is constructed it can be committed to the chain.
 
 Here is how user `Alice` would prepare her `state`::
 
@@ -75,7 +75,7 @@ The chain can then be published or transmitted to other users by publishing the 
 Interpreting chains
 -------------------
 
-Having access to the store (dictionary) containing other user's chain, and a head of this user's chain, one can use ``View`` interface to interpret their chain
+Having access to the store (dictionary) containing other user's chain, and a head of this user's chain, one can use the ``View`` interface.
 
 Here is how Carol can interpret Alice's claimchain, assuming Alice's store is ``alice_store``, the head of her chain is ``alice_head``, and ``params`` is Carol's ``LocalParams`` object::
 
