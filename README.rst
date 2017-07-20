@@ -108,3 +108,9 @@ claimchain/core.py        Core operations of encoding claims and capabilities
 claimchain/crypto         Cryptographic utilities, and algorithm implementations
 =======================   =======================================================
 
+
+Simulations
+===========
+
+The simulation and performance evaluation code, including notebooks and plots, now reside in [claimchain-simulations](https://github.com/claimchain/claimchain-simulations) repo.
+
