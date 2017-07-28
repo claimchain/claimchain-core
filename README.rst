@@ -15,7 +15,8 @@ Installing
 
 For the moment, the package needs to be installed manually from Github::
 
-    git clone git@github.com:gdanezis/claimchain-core.git claimchain && cd claimchain
+    git clone git@github.com:gdanezis/claimchain-core.git claimchain
+    cd claimchain
     pip install -r requirements/base.txt
     pip install -e .
 
