@@ -8,7 +8,8 @@ from .utils import ensure_binary, profiled
 
 
 def _compute_claim_key(vrf_value, mode='enc'):
-    assert mode in ['enc', 'lookup'], ValueError('Invalid mode')
+    if mode not in ['enc', 'lookup']:
+        raise ValueError('Invalid mode')
     pp = PublicParams.get_default()
     size = pp.enc_key_size if mode == 'enc' else pp.lookup_key_size
     mode = ensure_binary(mode)
@@ -16,7 +17,8 @@ def _compute_claim_key(vrf_value, mode='enc'):
 
 
 def _compute_capability_key(nonce, shared_secret, claim_label, mode='enc'):
-    assert mode in ['enc', 'lookup'], ValueError('Invalid mode')
+    if mode not in ['enc', 'lookup']:
+        ValueError('Invalid mode')
     pp = PublicParams.get_default()
     size = pp.enc_key_size if mode == 'enc' else pp.lookup_key_size
     shared_secret_hash = pp.hash_func(shared_secret.export()).digest()
