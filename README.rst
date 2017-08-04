@@ -10,6 +10,8 @@ ClaimChain
 A core and experimental implementation of ClaimChain, decentralized Public Key Infrastructure.
 
 
+
+
 Installing
 ==========
 
@@ -120,3 +122,8 @@ Simulations
 
 The simulation and performance evaluation code, including notebooks and plots, now reside in `claimchain-simulations <https://github.com/claimchain/claimchain-simulations>`_ repo.
 
+
+Usage warning
+=============
+
+This code is made for research purposes. It is not to be used in real-world systems. Not all security features are implemented, and some of the  cryptographic instantiations need to be changed to more secure alternatives.
