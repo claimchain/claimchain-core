@@ -36,6 +36,12 @@ def _salt_label(nonce, claim_label):
     return b"lab_%s.%s" % (nonce, claim_label)
 
 
+# TODO: Remove. Temporary fix for gdanezis/petlib#16
+from petlib.bindings import _FFI
+def _fix_bytes(tag):
+    return _FFI.string(tag)
+
+
 @profiled
 def get_capability_lookup_key(owner_dh_pk, nonce, claim_label):
     nonce = ensure_binary(nonce)
@@ -62,8 +68,7 @@ def encode_claim(nonce, claim_label, claim_content):
     claim = encode([vrf.proof, claim_content])
     enc_body, tag = pp.enc_cipher.quick_gcm_enc(
             enc_key, b"\x00"*pp.enc_key_size, claim)
-    # TODO: Remove. Temporary fix for gdanezis/petlib#16
-    tag = bytes(tag)
+    tag = _fix_bytes(tag)
 
     enc_claim = encode([enc_body, tag])
     return (vrf.value, lookup_key, enc_claim)
@@ -106,8 +111,8 @@ def encode_capability(reader_dh_pk, nonce, claim_label, vrf_value):
 
     enc_body, tag = cipher.quick_gcm_enc(
             enc_key, b"\x00"*pp.enc_key_size, vrf_value)
-    # TODO: Remove. Temporary fix for gdanezis/petlib#16
-    tag = bytes(tag)
+    tag = _fix_bytes(tag)
+
     return lookup_key, encode([enc_body, tag])
 
 
