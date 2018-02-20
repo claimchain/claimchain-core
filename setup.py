@@ -12,7 +12,7 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
 
 setup(
     name='claimchain',
-    version='0.1dev',
+    version='0.1.1',
     packages=['claimchain',],
     license='MIT',
     description='Core and experimental implementation of ClaimChain, decentralized PKI',
