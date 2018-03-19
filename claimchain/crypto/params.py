@@ -53,10 +53,18 @@ class LocalParams(object):
         )
 
     def public_export(self):
+        return self._export(private=False)
+
+    def private_export(self):
+        return self._export(private=True)
+
+    def _export(self, private=False):
         result = {}
         for name, attr in asdict(self, recurse=False).items():
             if isinstance(attr, Keypair):
                 result[name + '_pk'] = pet2ascii(attr.pk)
+                if private:
+                    result[name + '_sk'] = pet2ascii(attr.sk)
         return result
 
     @staticmethod
