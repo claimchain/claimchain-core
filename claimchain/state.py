@@ -1,14 +1,14 @@
+import json
 import os
 import warnings
+
+import attr
+
 from time import time
-from base64 import b64encode
-from hashlib import sha256
 from collections import defaultdict
 
-from attr import attrs, attrib, asdict, Factory
-
-from hippiehug import Chain
-from hippiehug import Tree
+from hippiepug.chain import Chain, BlockBuilder
+from hippiepug.tree import Tree, TreeBuilder
 
 from .core import get_capability_lookup_key
 from .core import encode_capability, decode_capability
@@ -17,36 +17,33 @@ from .core import _compute_claim_key
 from .crypto import PublicParams, LocalParams
 from .crypto import sign, verify_signature
 from .utils import bytes2ascii, ascii2bytes, pet2ascii, ascii2pet
-from .utils import profiled, cached_property
+from .utils import profiled
+from .utils import cached_property
 from .utils import Tree, Blob, ObjectStore
 
 
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 
 
-@attrs
+@attr.s
 class Metadata(object):
-    params = attrib()
-    identity_info = attrib(default=None)
+    params = attr.ib()
+    identity_info = (default=None)
 
 
-@attrs
+@attr.s
 class Payload(object):
-    mtr_hash  = attrib()
-    metadata  = attrib()
-    nonce     = attrib(default=False)
-    timestamp = attrib(default=Factory(lambda: time()))
-    version   = attrib(default=PROTOCOL_VERSION)
+    mtr_hash  = attr.ib()
+    metadata  = attr.ib()
+    nonce     = attr.ib(default=False)
+    timestamp = attr.ib(default=Factory(lambda: time()))
+    version   = attr.ib(default=PROTOCOL_VERSION)
 
     @staticmethod
-    def build(tree, nonce, identity_info=None):
-        metadata = Metadata(
+    def build(mtr_hash, nonce, identity_info=None):
+        metadata = BlockMetadata(
                 params=LocalParams.get_default().public_export(),
                 identity_info=identity_info)
-        if tree.root_hash is not None:
-            mtr_hash = bytes2ascii(tree.root_hash)
-        else:
-            mtr_hash = None
         return Payload(metadata=metadata,
                        mtr_hash=mtr_hash,
                        nonce=bytes2ascii(nonce))
@@ -58,20 +55,16 @@ class Payload(object):
         raw_payload['metadata'] = Metadata(**raw_metadata)
         return Payload(**raw_payload)
 
-    def export(self):
+    def as_dict(self):
         return asdict(self)
 
 
-@profiled
-def _build_tree(store, enc_items_map):
-    if not isinstance(store, ObjectStore):
-        store = ObjectStore(store)
-    tree = Tree(store)
-    enc_blob_map = {key: Blob(enc_item)
-                    for key, enc_item in enc_items_map.items()
-                    if not isinstance(enc_item, Blob)}
-    tree.update(enc_blob_map)
-    return tree
+class ClaimChainBlockBuilder(BlockBuilder)
+    def pre_commit(self):
+        """Substitute"""
+        serialized_payload = json.dumps(self.payload.as_dict(), sort_keys=True)
+        payload_hash = self.object_store.hash_object(serialized_payload)
+        sig = self.sign(self.payload)
 
 
 def _sign_block(block):
@@ -79,13 +72,12 @@ def _sign_block(block):
     block.aux = pet2ascii(sig)
 
 
-class State(object):
+class ClaimChainState(object):
     def __init__(self, identity_info=None):
         self.identity_info = identity_info
 
         self._claim_content_by_label = {}
         self._caps_by_reader_pk = defaultdict(set)
-        self._enc_items_map = {}
         self._vrf_value_by_label = {}
         self._payload = None
         self._tree = None
@@ -96,19 +88,21 @@ class State(object):
             raise ValueError('State not committed yet.')
         return self._tree
 
-    def commit(self, target_chain, tree_store=None, nonce=None):
+    def commit(self, chain_store, tree_store=None, nonce=None):
         if tree_store is None:
-            tree_store = target_chain.store
-        self._nonce = nonce = \
-                nonce or os.urandom(PublicParams.get_default().nonce_size)
+            tree_store = chain_store
+        if nonce is None:
+            nonce = os.urandom(PublicParams.get_default().nonce_size)
+        self._nonce = nonce
+
+        tree_builder = TreeBuilder(tree_store)
 
         # Encode claims
-        enc_items_map = {}
         vrf_value_by_label = {}
         for claim_label, claim_content in self._claim_content_by_label.items():
             vrf_value, lookup_key, enc_claim = encode_claim(
                     nonce, claim_label, claim_content)
-            enc_items_map[lookup_key] = enc_claim
+            tree_builder[lookup_key] = enc_claim
             vrf_value_by_label[claim_label] = vrf_value
 
         # Encode capabilities
@@ -123,24 +117,21 @@ class State(object):
                     break
                 lookup_key, enc_cap = encode_capability(
                         reader_dh_pk, nonce, claim_label, vrf_value)
-                enc_items_map[lookup_key] = enc_cap
+                tree_builder[lookup_key] = enc_cap
 
         # Put all the encrypted items in a new tree
-        tree = _build_tree(tree_store, enc_items_map)
+        self._tree = tree_builder.commit()
 
         # Construct payload
         payload = Payload.build(
-                tree=tree,
-                identity_info=self.identity_info,
-                nonce=nonce)
-        target_chain.multi_add([payload.export()], pre_commit_fn=_sign_block)
+                mtr_hash=tree.root_hash,
+                nonce=nonce,
+                identity_info=self.identity_info)
 
         self._payload = payload
-        self._tree = tree
-        self._enc_items_map = enc_items_map
         self._vrf_value_by_label = vrf_value_by_label
 
-        return target_chain.head
+        return chain.head
 
     def compute_evidence_keys(self, reader_dh_pk, claim_label):
         try:
@@ -189,8 +180,8 @@ class State(object):
         return list(self._caps_by_reader_pk[reader_dh_pk])
 
 
-class View(object):
-    def __init__(self, source_chain, source_tree=None):
+class ClaimChainView(object):
+    def __init__(self, chain_store, tree_store):
         self.chain = source_chain
         self._latest_block = self.chain.store[self.chain.head]
         self._nonce = ascii2bytes(self.payload.nonce)

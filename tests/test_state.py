@@ -1,6 +1,6 @@
 import pytest
 
-import hippiehug
+import hippiepug
 from petlib.pack import encode, decode
 
 from claimchain.state import State, View, Payload
@@ -68,7 +68,7 @@ def commit_claims(state, claims, caps=None):
         state.grant_access(reader_dh_pk, label)
 
     store = {}
-    chain = hippiehug.Chain(store)
+    chain = hippiepug.Chain(store)
     head = state.commit(chain)
 
     block = store[head]
@@ -77,7 +77,7 @@ def commit_claims(state, claims, caps=None):
 
     # Get associated Merkle tree
     mtr_hash = ascii2bytes(block_content['mtr_hash'])
-    tree = hippiehug.Tree(store, root_hash=mtr_hash)
+    tree = hippiepug.Tree(store, root_hash=mtr_hash)
     return nonce, chain, tree
 
 
