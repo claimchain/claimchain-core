@@ -3,12 +3,11 @@ import pytest
 import hippiepug
 from petlib.pack import encode, decode
 
-from claimchain.state import State, View, Payload
+from claimchain.state import ChainState, ChainView, Payload
 from claimchain.core import get_capability_lookup_key
 from claimchain.core import _compute_claim_key, _salt_label
 from claimchain.crypto import PublicParams, LocalParams, compute_vrf
 from claimchain.utils import ascii2bytes
-from claimchain.utils import Tree, ObjectStore
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -23,6 +22,7 @@ def state():
 
 
 def test_build_payload(local_params):
+    tree = TreeBuilder()
     payload = Payload.build(Tree(), b'nonce')
     assert payload.mtr_hash is None
 
