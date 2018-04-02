@@ -250,8 +250,14 @@ class View(object):
                             claim_label, vrf_value, enc_claim)
 
     def __getitem__(self, claim_label):
-        vrf_value, claim_lookup_key = self._lookup_capability(claim_label)
-        claim = self._lookup_claim(claim_label, vrf_value, claim_lookup_key)
+        reader_vrf = LocalParams.get_default().vrf.pk
+        if reader_vrf == self.params.vrf.pk:
+            vrf_value, claim_lookup_key, enc_claim = encode_claim(
+                    self._nonce, claim_label, "")
+            claim = self._lookup_claim(claim_label, vrf_value, claim_lookup_key)
+        else:
+            vrf_value, claim_lookup_key = self._lookup_capability(claim_label)
+            claim = self._lookup_claim(claim_label, vrf_value, claim_lookup_key)
         return claim
 
     def get(self, claim_label):
