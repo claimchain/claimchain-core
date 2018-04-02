@@ -56,6 +56,7 @@ def get_capability_lookup_key(owner_dh_pk, nonce, claim_label):
 
 @profiled
 def encode_claim(nonce, claim_label, claim_content):
+    nonce = ensure_binary(nonce)
     claim_label = ensure_binary(claim_label)
     claim_content = ensure_binary(claim_content)
 
