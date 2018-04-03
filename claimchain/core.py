@@ -7,6 +7,15 @@ from .crypto import PublicParams, LocalParams
 from .utils import ensure_binary, profiled
 
 
+# TODO: Remove. Temporary fix for gdanezis/petlib#16
+def get_tag(tag):
+    if not isinstance(tag, str):
+        from petlib.bindings import _FFI
+        return bytes(_FFI.buffer(tag)[:])
+    else:
+        return tag
+
+
 def _compute_claim_key(vrf_value, mode='enc'):
     if mode not in ['enc', 'lookup']:
         raise ValueError('Invalid mode')
@@ -62,8 +71,7 @@ def encode_claim(nonce, claim_label, claim_content):
     claim = encode([vrf.proof, claim_content])
     enc_body, tag = pp.enc_cipher.quick_gcm_enc(
             enc_key, b"\x00"*pp.enc_key_size, claim)
-    # TODO: Remove. Temporary fix for gdanezis/petlib#16
-    tag = bytes(tag)
+    tag = get_tag(tag)
 
     enc_claim = encode([enc_body, tag])
     return (vrf.value, lookup_key, enc_claim)
@@ -77,6 +85,7 @@ def decode_claim(owner_vrf_pk, nonce, claim_label, vrf_value, encrypted_claim):
     cipher = pp.enc_cipher
     salted_label = _salt_label(nonce, claim_label)
     (encrypted_body, tag) = decode(encrypted_claim)
+    tag = get_tag(tag)
 
     lookup_key = _compute_claim_key(vrf_value, mode='lookup')
     enc_key = _compute_claim_key(vrf_value, mode='enc')
@@ -106,8 +115,7 @@ def encode_capability(reader_dh_pk, nonce, claim_label, vrf_value):
 
     enc_body, tag = cipher.quick_gcm_enc(
             enc_key, b"\x00"*pp.enc_key_size, vrf_value)
-    # TODO: Remove. Temporary fix for gdanezis/petlib#16
-    tag = bytes(tag)
+    tag = get_tag(tag)
     return lookup_key, encode([enc_body, tag])
 
 
@@ -120,6 +128,7 @@ def decode_capability(owner_dh_pk, nonce, claim_label, encrypted_capability):
     enc_key = _compute_capability_key(
             nonce, shared_secret, claim_label, mode='enc')
     enc_body, tag = decode(encrypted_capability)
+    tag = get_tag(tag)
     vrf_value = cipher.quick_gcm_dec(
             enc_key, b"\x00"*pp.enc_key_size, enc_body, tag)
     claim_lookup_key = _compute_claim_key(vrf_value, mode='lookup')
