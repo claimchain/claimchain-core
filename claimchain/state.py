@@ -3,22 +3,22 @@ import os
 import warnings
 
 import attr
+import hippiepug as pug
 
 from time import time
 from collections import defaultdict
-
-from hippiepug.chain import Chain, BlockBuilder
-from hippiepug.tree import Tree, TreeBuilder
 
 from .core import get_capability_lookup_key
 from .core import encode_capability, decode_capability
 from .core import encode_claim, decode_claim
 from .core import _compute_claim_key
-from .crypto import PublicParams, LocalParams
-from .crypto import sign, verify_signature
+
 from .utils import bytes2ascii, ascii2bytes, pet2ascii, ascii2pet
 from .utils import profiled
 from .utils import cached_property
+
+from .crypto import PublicParams, LocalParams
+from .crypto import sign, verify_signature
 
 
 PROTOCOL_VERSION = 2
@@ -64,45 +64,65 @@ class Payload(object):
         raw_payload['metadata'] = Metadata(**raw_metadata)
         return Payload(**raw_payload)
 
-    def export(self):
+    def to_dict(self):
         """Export to dictionary."""
         return asdict(self)
 
+    def to_bytes(self):
+        """Export to bytes using json."""
+        return json.dumps(self.payload.export(), sort_keys=True)
 
-class BlockBuilder(BlockBuilder):
+
+class SignedBlockBuilder(pug.chain.BlockBuilder):
     def pre_commit(self):
         """Sign the payload before committing."""
         # Convert payload to JSON-dumped string for signing.
-        serialized_payload = json.dumps(self.payload.export(), sort_keys=True)
-        payload_hash = self.object_store.hash_object(serialized_payload)
+        payload_hash = self.object_store.hash_object(payload.to_bytes())
         sig = self.sign(self.payload)
 
         # Substitute payload with tuple raw payload and signature
         self.payload = (self.payload.as_dict(), pet2ascii(sig))
 
 
-class ChainState(object):
-    def __init__(self, identity_info=None):
-        self.identity_info = identity_info
+class ClaimchainBuilder(object):
+    def __init__(self, current_claimchain):
+        self.current_claimchain = current_claimchain
+        self.identity_info = None
 
         self._claim_content_by_label = {}
         self._caps_by_reader_pk = defaultdict(set)
         self._vrf_value_by_label = {}
         self._payload = None
+        self._chain = None
         self._tree = None
 
-    def commit(self, chain_store, tree_store=None, nonce=None):
+    @property
+    def tree(self):
+        try:
+            return self._tree
+        except AttributeError:
+            raise ValueError('Tree is not committed yet.')
+
+    @property
+    def chain(self):
+        try:
+            return self._chain
+        except AttributeError:
+            raise ValueError('Chain is not committed yet.')
+
+    def commit(self, nonce=None):
         """Commit the state to a claimchain."""
 
-        if tree_store is None:
+        if self.current_claimchain.tree_store is None:
             tree_store = chain_store
         if nonce is None:
             nonce = os.urandom(PublicParams.get_default().nonce_size)
         self._nonce = nonce
 
+        block_builder = SignedBlockBuilder(chain_store)
         tree_builder = TreeBuilder(tree_store)
 
-        # Encode claims
+        # Encode claims.
         vrf_value_by_label = {}
         for claim_label, claim_content in self._claim_content_by_label.items():
             vrf_value, lookup_key, enc_claim = encode_claim(
@@ -110,7 +130,7 @@ class ChainState(object):
             tree_builder[lookup_key] = enc_claim
             vrf_value_by_label[claim_label] = vrf_value
 
-        # Encode capabilities
+        # Encode capabilities.
         for reader_dh_pk, caps in self._caps_by_reader_pk.items():
             for claim_label in caps:
                 try:
@@ -124,19 +144,19 @@ class ChainState(object):
                         reader_dh_pk, nonce, claim_label, vrf_value)
                 tree_builder[lookup_key] = enc_cap
 
-        # Put all the encrypted items in a new tree
-        self._tree = tree_builder.commit()
-
-        # Construct payload
-        payload = Payload.build(
-                mtr_hash=tree.root_hash,
-                nonce=nonce,
-                identity_info=self.identity_info)
-
-        self._payload = payload
         self._vrf_value_by_label = vrf_value_by_label
 
-        return chain.head
+        # Put all the encrypted items in a new tree.
+        self._tree = tree_builder.commit()
+
+        # Put the payload in the chain.
+        self._payload = block_builder.payload = Payload.build(
+                mtr_hash=self.tree.root,
+                nonce=nonce,
+                identity_info=self.identity_info)
+        self._chain = block_builder.commit()
+
+        return self.chain.head
 
     def compute_evidence_keys(self, reader_dh_pk, claim_label):
         try:
@@ -186,41 +206,72 @@ class ChainState(object):
         return list(self._caps_by_reader_pk[reader_dh_pk])
 
 
-class ChainView(object):
-    def __init__(self, chain_store, tree_store):
-        self.chain = source_chain
-        self._latest_block = self.chain.store[self.chain.head]
-        self._nonce = ascii2bytes(self.payload.nonce)
-        if self.payload.mtr_hash is not None:
-            self.tree = source_tree or Tree(
-                    object_store=ObjectStore(self.chain.store),
-                    root_hash=ascii2bytes(self.payload.mtr_hash))
+class Claimchain(object):
+    @staticmethod
+    def from_store(chain_store, head, tree_store=None):
+        """
+        Build a claimchain from given stores.
 
-            if ascii2bytes(self.payload.mtr_hash) != self.tree.root_hash:
-                raise ValueError("Supplied tree doesn't match MTR in the chain.")
+        :param chain_store: Store where the chain blocks can be found
+        :type chain_store: :py:mod:`hippiepug.store.ObjectStore`
+        :param head: Chain head
+        :param tree_store: Store where tree tree nodes can be found
+        """
+        self._chain = pug.chain.Chain(chain_store, head)
+        if tree_store is None:
+            tree_store = chain_store
+        self._tree_store = tree_store
+
+    def __init__(self, chain, tree=None):
+        self._chain = chain
+        if tree is None:
+            self._tree_store = self._chain.object_store
+        else:
+            self._tree = tree
 
     @property
     def head(self):
+        """Hash of the latest block of the chain."""
         return self.chain.head
+
+    @property
+    def chain(self):
+        """Underlying chain view."""
+        return self._chain
+
+    @property
+    def tree(self):
+        """View of the tree in the latest chain block."""
+        if self._tree is not None:
+            return self._tree
+        else:
+            if self.payload.mtr_hash is not None:
+                self._tree = pug.tree.Tree(
+                        object_store=self._tree_store,
+                        root=self.payload.mtr_hash)
+            return self._tree
 
     @cached_property
     def payload(self):
-        return Payload.from_dict(self._latest_block.items[0])
+        """Parsed payload of the latest block."""
+        payload, sig = self.chain.head_block.payload
+        return Payload.from_dict(self.chain.payload)
 
     @cached_property
     def params(self):
+        """Local cryptographic params."""
         return LocalParams.from_dict(self.payload.metadata.params)
 
     # TODO: This validation is incorrect for any block but the genesis
-    def validate(self):
-        owner_sig_pk = self.params.sig.pk
-        raw_sig_backup = self._latest_block.aux
-        sig = ascii2pet(raw_sig_backup)
-        self._latest_block.aux = None
-        if not verify_signature(owner_sig_pk, sig, self._latest_block.hash()):
-            self._latest_block.aux = raw_sig_backup
-            raise ValueError("Invalid signature.")
-        self._latest_block.aux = raw_sig_backup
+    # def validate(self):
+    #     owner_sig_pk = self.params.sig.pk
+    #     raw_sig_backup = self._latest_block.aux
+    #     sig = ascii2pet(raw_sig_backup)
+    #     self._latest_block.aux = None
+    #     if not verify_signature(owner_sig_pk, sig, self._latest_block.hash()):
+    #         self._latest_block.aux = raw_sig_backup
+    #         raise ValueError("Invalid signature.")
+    #     self._latest_block.aux = raw_sig_backup
 
     def _lookup_capability(self, claim_label):
         cap_lookup_key = get_capability_lookup_key(

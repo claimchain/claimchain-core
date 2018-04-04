@@ -1,13 +1,18 @@
 import pytest
+import hippiepug as pug
 
-import hippiepug
 from petlib.pack import encode, decode
 
-from claimchain.state import ChainState, ChainView, Payload
+from claimchain.state import ClaimchainBuilder, Claimchain, Payload
 from claimchain.core import get_capability_lookup_key
 from claimchain.core import _compute_claim_key, _salt_label
 from claimchain.crypto import PublicParams, LocalParams, compute_vrf
 from claimchain.utils import ascii2bytes
+
+
+@pytest.fixture
+def object_store():
+    return pug.store.Sha256DictStore()
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -17,14 +22,17 @@ def local_params():
 
 
 @pytest.fixture
-def state():
-    return State()
+def builder(object_store):
+    return ClaimchainBuilder(object_store)
 
 
 def test_build_payload(local_params):
-    tree = TreeBuilder()
-    payload = Payload.build(Tree(), b'nonce')
-    assert payload.mtr_hash is None
+    mtr_hash = b'totally_a_tree_hash'
+    nonce = b'very_random_nonce'
+    payload = Payload.build(mtr_hash, nonce)
+    assert payload.mtr_hash == mtr_hash
+    assert ascii2bytes(payload.nonce) == nonce
+    assert payload.metadata.params == local_params.export()
 
 
 def test_parse_payload(local_params):
@@ -36,40 +44,38 @@ def test_parse_payload(local_params):
     assert isinstance(exported['metadata'], dict)
 
 
-def test_add_claim(state):
-    state["marios"] = "test"
-    assert state["marios"] == "test"
+def test_add_claim(builder):
+    builder["marios"] = "test"
+    assert builder["marios"] == "test"
 
 
-def test_clear(state):
-    state["marios"] = "test"
-    state.clear()
+def test_clear(builder):
+    builder["marios"] = "test"
+    builder.clear()
     with pytest.raises(KeyError):
-        state["marios"]
+        builder["marios"]
 
 
-def test_grant_access(state):
-    state["marios"] = "test"
-    state["carmela"] = "test"
+def test_grant_access(builder):
+    builder["marios"] = "test"
+    builder["carmela"] = "test"
 
     reader_params = LocalParams.generate()
     reader_pk = reader_params.dh.pk
-    state.grant_access(reader_params.dh.pk, ["marios", "carmela"])
-    assert set(state.get_capabilities(reader_pk)) == {"marios", "carmela"}
+    builder.grant_access(reader_params.dh.pk, ["marios", "carmela"])
+    assert set(builder.get_capabilities(reader_pk)) == {"marios", "carmela"}
 
-    state.revoke_access(reader_params.dh.pk, ["marios"])
-    assert set(state.get_capabilities(reader_pk)) == {"carmela"}
+    builder.revoke_access(reader_params.dh.pk, ["marios"])
+    assert set(builder.get_capabilities(reader_pk)) == {"carmela"}
 
 
-def commit_claims(state, claims, caps=None):
+def commit_claims(builder, object_store, claims, caps=None):
     for label, content in claims:
-        state[label] = content
+        builder[label] = content
     for reader_dh_pk, label in (caps or []):
-        state.grant_access(reader_dh_pk, label)
+        builder.grant_access(reader_dh_pk, label)
 
-    store = {}
-    chain = hippiepug.Chain(store)
-    head = state.commit(chain)
+    head = builder.commit(object_store)
 
     block = store[head]
     block_content = block.items[0]
@@ -81,8 +87,10 @@ def commit_claims(state, claims, caps=None):
     return nonce, chain, tree
 
 
-def test_tree_contains_claim_lookup_key(state):
-    nonce, chain, tree = commit_claims(state, [("marios", "test")])
+def test_tree_contains_claim_lookup_key(object_store):
+    builder = ClaimchainBuilder()
+    nonce, chain, tree = commit_claims(
+            builder, object_store, [("marios", "test")])
 
     salted_label = _salt_label(nonce, "marios")
     vrf = compute_vrf(salted_label)
@@ -94,12 +102,12 @@ def test_tree_contains_claim_lookup_key(state):
     assert leaf.key == lookup_key
 
 
-def test_tree_contains_cap_lookup_key(state):
+def test_tree_contains_cap_lookup_key(object_store):
     reader_params = LocalParams.generate()
     reader_pk = reader_params.dh.pk
-    state.grant_access(reader_pk, ["marios"])
+    builder.grant_access(reader_pk, ["marios"])
 
-    nonce, chain, tree = commit_claims(state, [("marios", "test")])
+    nonce, chain, tree = commit_claims(object_store, [("marios", "test")])
 
     owner_pk = LocalParams.get_default().dh.pk
     with reader_params.as_default():
@@ -110,13 +118,13 @@ def test_tree_contains_cap_lookup_key(state):
     assert leaf.key == lookup_key
 
 
-def test_evidence(state):
+def test_evidence(object_store):
     reader_params = LocalParams.generate()
     reader_pk = reader_params.dh.pk
-    state.grant_access(reader_pk, ["marios"])
+    builder.grant_access(reader_pk, ["marios"])
 
-    nonce, chain, tree = commit_claims(state, [("marios", "test")])
-    evidence = state.compute_evidence_keys(reader_pk, "marios")
+    nonce, chain, tree = commit_claims(object_store, [("marios", "test")])
+    evidence = builder.compute_evidence_keys(reader_pk, "marios")
     assert len(evidence) > 0
 
     evidence_store = ObjectStore({k: tree.store[k] for k in evidence})
@@ -127,9 +135,9 @@ def test_evidence(state):
         assert view["marios"] == b"test"
 
 
-def test_view_missing_and_non_existent_label(state):
+def test_view_missing_and_non_existent_label(builder):
     reader_params = LocalParams.generate()
-    _, chain, tree = commit_claims(state,
+    _, chain, tree = commit_claims(builder,
             [("marios", "test1"), ("bogdan", "test2")],
             [(reader_params.dh.pk, ["marios"])])
 
@@ -141,9 +149,9 @@ def test_view_missing_and_non_existent_label(state):
             view["bogdan"]
 
 
-def test_view_label_retrieval(state):
+def test_view_label_retrieval(builder):
     reader_params = LocalParams.generate()
-    _, chain, tree = commit_claims(state,
+    _, chain, tree = commit_claims(builder,
             [("marios", "test1"), ("bogdan", "test2")],
             [(reader_params.dh.pk, ["marios", "bogdan"])])
 

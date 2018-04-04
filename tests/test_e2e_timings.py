@@ -14,7 +14,6 @@ from petlib.pack import encode
 from petlib.ecdsa import do_ecdsa_setup, do_ecdsa_sign, do_ecdsa_verify
 from msgpack import packb
 
-from claimchain.state import Payload, ClaimChainState, ClaimChainView
 from claimchain.core import encode_claim, decode_claim
 from claimchain.core import encode_capability, decode_capability, get_capability_lookup_key
 from claimchain.crypto import LocalParams, PublicParams, sign, Keypair

@@ -53,6 +53,7 @@ class LocalParams(object):
         )
 
     def public_export(self):
+        """Export public keys to dict."""
         result = {}
         for name, attr in asdict(self, recurse=False).items():
             if isinstance(attr, Keypair):
@@ -60,24 +61,25 @@ class LocalParams(object):
         return result
 
     @staticmethod
-    def from_dict(exported):
-        def maybe_decode(encoded_point):
+    def _maybe_load_keypair(key_prefix):
+        def _maybe_decode(encoded_point):
             try:
                 return ascii2pet(encoded_point)
             except AttributeError:
                 pass
 
-        def maybe_load_keypair(prefix):
-            keypair = Keypair(
-                    pk = maybe_decode(exported.get(prefix + '_pk')),
-                    sk = maybe_decode(exported.get(prefix + '_sk')))
-            if keypair.pk is not None or keypair.sk is not None:
-                return keypair
+        keypair = Keypair(
+                pk = maybe_decode(exported.get(prefix + '_pk')),
+                sk = maybe_decode(exported.get(prefix + '_sk')))
+        if keypair.pk is not None or keypair.sk is not None:
+            return keypair
 
+    @staticmethod
+    def from_dict(exported):
+        """Build params from dict."""
         params = LocalParams()
-        params.vrf = maybe_load_keypair('vrf')
-        params.sig = maybe_load_keypair('sig')
-        params.dh = maybe_load_keypair('dh')
-        params.rescue = maybe_load_keypair('rescue')
+        params.vrf = LocalParams._maybe_load_keypair('vrf')
+        params.sig = LocalParams._maybe_load_keypair('sig')
+        params.dh = LocalParams._maybe_load_keypair('dh')
+        params.rescue = LocalParams._maybe_load_keypair('rescue')
         return params
-
