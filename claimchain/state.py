@@ -191,6 +191,7 @@ class State(object):
 
 class View(object):
     def __init__(self, source_chain, source_tree=None):
+        self._viewer_params = LocalParams.get_default()
         self.chain = source_chain
         self._latest_block = self.chain.store[self.chain.head]
         self._nonce = ascii2bytes(self.payload.nonce)
@@ -250,8 +251,13 @@ class View(object):
                             claim_label, vrf_value, enc_claim)
 
     def __getitem__(self, claim_label):
-        vrf_value, claim_lookup_key = self._lookup_capability(claim_label)
-        claim = self._lookup_claim(claim_label, vrf_value, claim_lookup_key)
+        if self._viewer_params.vrf.pk == self.params.vrf.pk:
+            vrf_value, claim_lookup_key, enc_claim = encode_claim(
+                    self._nonce, claim_label, "")
+            claim = self._lookup_claim(claim_label, vrf_value, claim_lookup_key)
+        else:
+            vrf_value, claim_lookup_key = self._lookup_capability(claim_label)
+            claim = self._lookup_claim(claim_label, vrf_value, claim_lookup_key)
         return claim
 
     def get(self, claim_label):

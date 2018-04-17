@@ -147,6 +147,10 @@ def test_view_label_retrieval(state):
             [("marios", "test1"), ("bogdan", "test2")],
             [(reader_params.dh.pk, ["marios", "bogdan"])])
 
+    own_view = View(chain)
+    assert own_view["marios"] == b"test1"
+    assert own_view["bogdan"] == b"test2"
+
     with reader_params.as_default():
         view = View(chain)
         assert view["marios"] == b"test1"

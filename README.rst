@@ -17,8 +17,8 @@ Installing
 
 For the moment, the package needs to be installed manually from Github::
 
-    git clone git@github.com:gdanezis/claimchain-core.git claimchain
-    cd claimchain
+    git clone git@github.com:claimchain/claimchain-core.git
+    cd claimchain-core
     pip install -r requirements/base.txt
     pip install -e .
 
@@ -66,7 +66,9 @@ Note that the second argument must be an iterable of claim labels, not a single 
 To commit the state, first, a chain needs to be built, and second, the cryptographic keys have to be generated::
 
     from hippiehug import Chain
-    from claimchain import LocalParams
+    from claimchain import LocalParams, State
+
+    state = State()
 
     # Generate cryptographic keys
     params = LocalParams.generate()
@@ -98,7 +100,7 @@ Here is how Carol can interpret Alice's claimchain, assuming Alice's store is ``
         # Try to get claim with label 'bob'
         claim = alice_view['bob']
 
-        assert claim == 'Bob is a good lad'
+        assert claim == b'Bob is a good lad'
 
 Finally, this is how Carol can retrieve Alice's DH public key::
 
