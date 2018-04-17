@@ -39,7 +39,7 @@ def _salt_label(nonce, claim_label):
 # TODO: Remove. Temporary fix for gdanezis/petlib#16
 from petlib.bindings import _FFI
 def _fix_bytes(tag):
-    return _FFI.string(tag)
+    return bytes(_FFI.buffer(tag)[:])
 
 
 @profiled
