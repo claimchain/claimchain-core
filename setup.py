@@ -12,13 +12,13 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
 
 setup(
     name='claimchain',
-    version='0.2.2',
+    version='0.2.3',
     packages=["claimchain", "claimchain.crypto", "claimchain.utils"],
     license='MIT',
     description='Implementation of ClaimChain, a cryptographic data structure',
     long_description=long_description,
-    author='George Danezis',
-    author_email='g.danezis@ucl.ac.uk',
+    author='Bogdan Kulynych (EPFL SPRING Lab), George Danezis (UCL)',
+    author_email='bogdan.kulynych@epfl.ch, g.danezis@ucl.ac.uk',
     classifiers=[
         'Intended Audience :: Developers',
         'License :: OSI Approved :: MIT License',
