@@ -1,3 +1,7 @@
+"""
+Low-level operations for encoding and decoding claims and capabilities.
+"""
+
 from petlib.ec import EcGroup, EcPt
 from petlib.bn import Bn
 from petlib.pack import encode, decode
@@ -45,6 +49,12 @@ def _fix_bytes(tag):
 
 @profiled
 def get_capability_lookup_key(owner_dh_pk, nonce, claim_label):
+    """Compute capability lookup key.
+
+    :param petlib.EcPt owner_dh_pk: Owner's DH public key
+    :param bytes nonce: Nonce
+    :param bytes claim_label: Corresponding claim label
+    """
     nonce = ensure_binary(nonce)
     claim_label = ensure_binary(claim_label)
     pp = PublicParams.get_default()
@@ -57,6 +67,12 @@ def get_capability_lookup_key(owner_dh_pk, nonce, claim_label):
 
 @profiled
 def encode_claim(nonce, claim_label, claim_content):
+    """Encode claim.
+
+    :param bytes nonce: Nonce
+    :param bytes claim_label: Claim label
+    :param bytes claim_content: Claim content
+    """
     nonce = ensure_binary(nonce)
     claim_label = ensure_binary(claim_label)
     claim_content = ensure_binary(claim_content)
@@ -78,6 +94,14 @@ def encode_claim(nonce, claim_label, claim_content):
 
 @profiled
 def decode_claim(owner_vrf_pk, nonce, claim_label, vrf_value, encrypted_claim):
+    """Decode claim.
+
+    :param petlib.EcPt owner_vrf_pk: Owner's VRF public key
+    :param bytes nonce: Nonce
+    :param bytes claim_label: Claim label
+    :param bytes vrf_value: Exported VRF value (hash)
+    :param bytes encrypted_claim: Claim content
+    """
     claim_label = ensure_binary(claim_label)
 
     pp = PublicParams.get_default()
@@ -93,13 +117,20 @@ def decode_claim(owner_vrf_pk, nonce, claim_label, vrf_value, encrypted_claim):
 
     vrf = VrfContainer(value=vrf_value, proof=proof)
     if not verify_vrf(owner_vrf_pk, vrf, salted_label):
-        raise Exception("Wrong VRF Value")
+        raise Exception("Wrong VRF value")
 
     return claim_content
 
 
 @profiled
 def encode_capability(reader_dh_pk, nonce, claim_label, vrf_value):
+    """Encode capability.
+
+    :param petlib.EcPt reader_dh_pk: Reader's VRF public key
+    :param bytes nonce: Nonce
+    :param bytes claim_label: Corresponding claim label
+    :param bytes vrf_value: Exported VRF value (hash)
+    """
     claim_label = ensure_binary(claim_label)
     pp = PublicParams.get_default()
     cipher = pp.enc_cipher
@@ -120,6 +151,13 @@ def encode_capability(reader_dh_pk, nonce, claim_label, vrf_value):
 
 @profiled
 def decode_capability(owner_dh_pk, nonce, claim_label, encrypted_capability):
+    """Decode capability.
+
+    :param petlib.EcPt owner_dh_pk: Owder's VRF public key
+    :param bytes nonce: Nonce
+    :param bytes claim_label: Corresponding claim label
+    :param bytes encrypted_capability: Encrypted capability
+    """
     pp = PublicParams.get_default()
     cipher = pp.enc_cipher
     params = LocalParams.get_default()
@@ -131,3 +169,4 @@ def decode_capability(owner_dh_pk, nonce, claim_label, encrypted_capability):
             enc_key, b"\x00"*pp.enc_key_size, enc_body, tag)
     claim_lookup_key = _compute_claim_key(vrf_value, mode='lookup')
     return vrf_value, claim_lookup_key
+

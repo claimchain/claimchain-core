@@ -10,7 +10,7 @@ future==0.16.0
 msgpack-python==0.5.4
 petlib==0.0.43
 pluggy==0.6.0
-profiled==0.0.2
+profiled==0.1.0
 py==1.5.2
 pycparser==2.18
 pytest==3.4.1

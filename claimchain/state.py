@@ -1,3 +1,8 @@
+# -*- coding: utf-8
+"""
+High-level ClaimChain interface.
+"""
+
 import os
 import warnings
 from time import time
@@ -27,12 +32,26 @@ PROTOCOL_VERSION = 1
 
 @attrs
 class Metadata(object):
+    """Block metadata.
+
+    :param params: Owner's cryptographic parameters.
+    :param identity_info: Owner's identity info (public key)
+    """
     params = attrib()
     identity_info = attrib(default=None)
 
 
 @attrs
 class Payload(object):
+    """Block payload.
+
+    :param bytes mtr_hash: Hash of the Merkle tree root
+    :param Metadata metadata: Block's metadata
+    :param bytes nonce: Nonce
+    :param timestamp: Unix-format timestamp
+    :param int version: Protocol version
+    """
+
     mtr_hash  = attrib()
     metadata  = attrib()
     nonce     = attrib(default=False)
@@ -41,6 +60,12 @@ class Payload(object):
 
     @staticmethod
     def build(tree, nonce, identity_info=None):
+        """Build a payload.
+
+        :param tree: Tree object
+        :param bytes nonce: Nonce
+        :param identity_info: Owner's identity info (public key)
+        """
         metadata = Metadata(
                 params=LocalParams.get_default().public_export(),
                 identity_info=identity_info)
@@ -54,12 +79,17 @@ class Payload(object):
 
     @staticmethod
     def from_dict(exported):
+        """Import payload from dictionary.
+
+        :param dict exported: Exported payload.
+        """
         raw_metadata = exported["metadata"]
         raw_payload = dict(exported)
         raw_payload['metadata'] = Metadata(**raw_metadata)
         return Payload(**raw_payload)
 
     def export(self):
+        """Export to dictionary."""
         return asdict(self)
 
 
@@ -81,6 +111,11 @@ def _sign_block(block):
 
 
 class State(object):
+    """ClaimChain owner state.
+
+    :param identity_info: Owner's identity info (public key)
+    """
+
     def __init__(self, identity_info=None):
         self.identity_info = identity_info
 
@@ -93,11 +128,21 @@ class State(object):
 
     @property
     def tree(self):
+        """Corresponding Merkle tree holding the claims and capabilities."""
         if self._tree is None:
             raise ValueError('State not committed yet.')
         return self._tree
 
     def commit(self, target_chain, tree_store=None, nonce=None):
+        """Commit state to a chain.
+
+        Constructs a new block and appends to a chain.
+
+        :param hippiehug.Chain target_chain: Chain to which a block will be
+                appended.
+        :param utils.ObjectStore tree_store: Object store to hold tree nodes.
+        :param bytes nonce: Nonce to include in the new block.
+        """
         if tree_store is None:
             tree_store = target_chain.store
         self._nonce = nonce = \
@@ -144,6 +189,11 @@ class State(object):
         return target_chain.head
 
     def compute_evidence_keys(self, reader_dh_pk, claim_label):
+        """List hashes of all nodes that prove inclusion of a claim label.
+
+        :param petlib.EcPt reader_dh_pk: Reader's DH public key
+        :param bytes claim_label: Claim label
+        """
         try:
             vrf_value = self._vrf_value_by_label[claim_label]
             cap_lookup_key = get_capability_lookup_key(
@@ -166,6 +216,7 @@ class State(object):
             return set()
 
     def clear(self):
+        """Clear buffer."""
         self._claim_content_by_label.clear()
         self._caps_by_reader_pk.clear()
 
@@ -175,23 +226,52 @@ class State(object):
         self._tree = None
 
     def __getitem__(self, label):
+        """Get queued claim by label.
+
+        :param label: Claim label
+        """
         return self._claim_content_by_label[label]
 
     def __setitem__(self, claim_label, claim_content):
+        """Add a claim with given label and content to be committed.
+
+        :param bytes claim_label: Claim label
+        :param bytes claim_content: Claim content
+        """
         self._claim_content_by_label[claim_label] = claim_content
 
     def grant_access(self, reader_dh_pk, claim_labels):
+        """Grant access for given claims a reader.
+
+        :param petlib.EcPt reader_dh_pk: Reader's DH public key
+        :param iterable claim_labels: List of claim labels
+        """
         self._caps_by_reader_pk[reader_dh_pk].update(set(claim_labels))
 
     def revoke_access(self, reader_dh_pk, claim_labels):
+        """Revoke access for given claims to a reader.
+
+        :param petlib.EcPt reader_dh_pk: Reader's DH public key
+        :param iterable claim_labels: List of claim labels
+        """
         self._caps_by_reader_pk[reader_dh_pk].difference_update(claim_labels)
 
     def get_capabilities(self, reader_dh_pk):
+        """List all labels accessibly by a reader.
+
+        :param petlib.EcPt reader_dh_pk: Reader's DH public key
+        """
         return list(self._caps_by_reader_pk[reader_dh_pk])
 
 
 class View(object):
+    """View of an existing ClaimChain."""
+
     def __init__(self, source_chain, source_tree=None):
+        """
+        :param hippiehug.Chain source_chain: Chain to view
+        :param utils.Tree source_tree: Tree object if available
+        """
         self._viewer_params = LocalParams.get_default()
         self.chain = source_chain
         self._latest_block = self.chain.store[self.chain.head]
@@ -206,18 +286,26 @@ class View(object):
 
     @property
     def head(self):
+        """Chain's head (latest block hash)."""
         return self.chain.head
 
     @cached_property
     def payload(self):
+        """Chain's latest block payload."""
         return Payload.from_dict(self._latest_block.items[0])
 
     @cached_property
     def params(self):
+        """Cryptographic params of the chain owner."""
         return LocalParams.from_dict(self.payload.metadata.params)
 
     # TODO: This validation is incorrect for any block but the genesis
     def validate(self):
+        """Validate the chain.
+
+        .. note ::
+            Don't use this method. It is broken. ¯\\_(ツ)_/¯
+        """
         owner_sig_pk = self.params.sig.pk
         raw_sig_backup = self._latest_block.aux
         sig = ascii2pet(raw_sig_backup)
@@ -252,6 +340,11 @@ class View(object):
                             claim_label, vrf_value, enc_claim)
 
     def __getitem__(self, claim_label):
+        """Get claim by label.
+
+        :param bytes claim_label: Claim label
+        :raises: ``KeyError`` if claim not found or not accessible
+        """
         if self._viewer_params.vrf.pk == self.params.vrf.pk:
             vrf_value, claim_lookup_key, enc_claim = encode_claim(
                     self._nonce, claim_label, "")
@@ -262,6 +355,11 @@ class View(object):
         return claim
 
     def get(self, claim_label):
+        """Get claim by label.
+
+        :param bytes claim_label: Claim label
+        :return: Claim or ``None`` if not found or not accessible.
+        """
         try:
             return self[claim_label]
         except KeyError:

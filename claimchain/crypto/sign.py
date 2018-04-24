@@ -4,6 +4,11 @@ from . import PublicParams, LocalParams
 
 
 def sign(message):
+    """Sign a message.
+
+    :param bytes message: Message
+    :return: Tuple of bignums (``petlib.bn.Bn``)
+    """
     pp = PublicParams.get_default()
     params = LocalParams.get_default()
     G = pp.ec_group
@@ -14,6 +19,13 @@ def sign(message):
 
 
 def verify_signature(sig_pk, sig, message):
+    """Verify a signature.
+
+    :param petlib.EcPt sig_pk: Signature verification key
+    :param sig: Signature
+    :type sig: tuple of bignums (``petlib.bn.Bn``)
+    :param bytes message: Message
+    """
     pp = PublicParams.get_default()
     G = pp.ec_group
     digest = pp.hash_func(message).digest()

@@ -12,10 +12,10 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
 
 setup(
     name='claimchain',
-    version='0.2.1',
+    version='0.2.2',
     packages=["claimchain", "claimchain.crypto", "claimchain.utils"],
     license='MIT',
-    description='Core and experimental implementation of ClaimChain, decentralized PKI',
+    description='Implementation of ClaimChain, a cryptographic data structure',
     long_description=long_description,
     author='George Danezis',
     author_email='g.danezis@ucl.ac.uk',
@@ -33,6 +33,7 @@ setup(
         'statistics',
         'defaultcontext',
         'hippiehug >= 0.1.1',
+        'profiled'
     ],
 
 )
