@@ -2,9 +2,9 @@
    :width: 50px
    :alt: ClaimChain
 
-***************
+===============
 claimchain-core
-***************
+===============
 
 .. image:: https://travis-ci.org/claimchain/claimchain-core.svg?branch=master
    :target: https://travis-ci.org/claimchain/claimchain-core
