@@ -14,6 +14,10 @@ claimchain-core
    :target: http://claimchain-core.readthedocs.io/en/latest/?badge=latest
    :alt: Documentation Status
 
+.. image:: https://zenodo.org/badge/92275408.svg
+   :target: https://zenodo.org/badge/latestdoi/92275408
+   :alt: Zenodo Citation
+
 |
 
 A core and experimental implementation of ClaimChain, cryptographic data
