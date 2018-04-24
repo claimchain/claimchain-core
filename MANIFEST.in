@@ -1,0 +1,7 @@
+include LICENSE*
+include *.ini
+graft tests
+graft docs
+
+recursive-exclude docs/build *
+global-exclude *.py[co]
