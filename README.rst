@@ -1,5 +1,5 @@
 .. image:: https://claimchain.github.io/claimchain.svg
-   :width: 100px
+   :width: 50px
    :alt: ClaimChain
 
 ***************
@@ -18,7 +18,7 @@ claimchain-core
 
 A core and experimental implementation of ClaimChain, cryptographic data
 structure. See the `web page <https://claimchain.github.io>`_ to learn about
-ClaimChain.
+ClaimChain. Check out the `documentation <https://claimchain-core.readthedocs.io/en/latest>`_.
 
 Usage warning
 =============

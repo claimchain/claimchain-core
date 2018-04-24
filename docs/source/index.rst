@@ -1,5 +1,9 @@
-`claimchain-core` documentation
-===============================
+.. image:: https://claimchain.github.io/claimchain.svg
+  :width: 50px
+  :align: right
+
+claimchain-core documentation
+=============================
 
 This is a brief documentation for `claimchain-core`, an experimental prototype
 implementation of ClaimChain, a cryptographic data structure. See the
