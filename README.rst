@@ -1,9 +1,20 @@
-**********
-ClaimChain
-**********
+.. image:: https://claimchain.github.io/claimchain.svg
+   :width: 100px
+   :alt: ClaimChain
+
+***************
+claimchain-core
+***************
 
 .. image:: https://travis-ci.org/claimchain/claimchain-core.svg?branch=master
    :target: https://travis-ci.org/claimchain/claimchain-core
+   :alt: Build Status
+
+.. image:: https://readthedocs.org/projects/claimchain-core/badge/?version=latest
+   :target: http://claimchain-core.readthedocs.io/en/latest/?badge=latest
+   :alt: Documentation Status
+
+|
 
 A core and experimental implementation of ClaimChain, cryptographic data
 structure. See the `web page <https://claimchain.github.io>`_ to learn about
@@ -38,20 +49,3 @@ And run::
 To test against both Python 2 and Python 3, run::
 
     tox
-
-
-This package
-============
-
-=======================   =======================================================
-claimchain/state.py       High-level ClaimChain interface
-claimchain/core.py        Core operations of encoding claims and capabilities
-claimchain/crypto         Cryptographic utilities, and algorithm implementations
-=======================   =======================================================
-
-
-Simulations
-===========
-
-The simulation and performance evaluation code, including notebooks and plots, now reside in `claimchain-simulations <https://github.com/claimchain/claimchain-simulations>`_ repo.
-
