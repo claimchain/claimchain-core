@@ -1,10 +1,11 @@
 from petlib.ec import EcGroup, EcPt
 from petlib.bn import Bn
 from petlib.pack import encode, decode
+from profiled import profiled
 
 from .crypto import compute_vrf, verify_vrf, VrfContainer
 from .crypto import PublicParams, LocalParams
-from .utils import ensure_binary, profiled
+from .utils import ensure_binary
 
 
 def _compute_claim_key(vrf_value, mode='enc'):

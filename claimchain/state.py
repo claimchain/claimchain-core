@@ -6,6 +6,7 @@ from hashlib import sha256
 from collections import defaultdict
 
 from attr import attrs, attrib, asdict, Factory
+from profiled import profiled
 
 from hippiehug import Chain
 from hippiehug import Tree
@@ -17,7 +18,7 @@ from .core import _compute_claim_key
 from .crypto import PublicParams, LocalParams
 from .crypto import sign, verify_signature
 from .utils import bytes2ascii, ascii2bytes, pet2ascii, ascii2pet
-from .utils import profiled, cached_property
+from .utils import cached_property
 from .utils import Tree, Blob, ObjectStore
 
 

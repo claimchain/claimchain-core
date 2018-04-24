@@ -2,11 +2,11 @@ from attr import attrs, attrib
 from petlib.ec import EcGroup, EcPt
 from petlib.bn import Bn
 from petlib.pack import encode, decode
+from profiled import profiled
 
 from hashlib import sha256
 
 from .params import PublicParams, LocalParams
-from ..utils import profiled
 
 
 @attrs

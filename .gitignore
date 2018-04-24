@@ -11,6 +11,4 @@ venv
 __pycache__
 .pytest_cache
 
-simulations/Enron/
-.ipynb_checkpoints
 .idea
