@@ -14,6 +14,7 @@ implementation of ClaimChain, a cryptographic data structure. See the
    :maxdepth: 2
    :caption: Contents:
 
+   installation
    guide
    api
 
