@@ -22,7 +22,9 @@ claimchain-core
 
 A core and experimental implementation of ClaimChain, a cryptographic data
 structure. See the `web page <https://claimchain.github.io>`_ to learn about
-ClaimChain. Check out the `documentation <https://claimchain-core.readthedocs.io/en/latest>`_.
+ClaimChain.
+
+Check out the `documentation <https://claimchain-core.readthedocs.io/en/latest>`_.
 
 *************
 Usage warning
