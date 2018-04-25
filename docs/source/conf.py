@@ -130,7 +130,7 @@ latex_elements = {
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
     (master_doc, 'ClaimChain.tex', u'ClaimChain Documentation',
-     u'Bogdan Kulynych, George Danezis', 'manual'),
+     u'Bogdan Kulynych, Marios Isaakidis, George Danezis', 'manual'),
 ]
 
 
