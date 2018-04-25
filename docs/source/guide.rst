@@ -1,10 +1,12 @@
+###########
 Usage guide
-===========
+###########
 
 High-level interface for ClaimChain consists of two classes, ``State`` for building claimchains, and ``View`` for parsing and interpreting claimchains.
 
+***************
 Building chains
----------------
+***************
 
 The core abstraction for a ClaimChain user is a `state`. The `state` contains information about the user, and claims they make about other users or objects. Currently, this package only supports private claims, which means the owner of a chain needs to explicitly make every claim readable by intended readers. Once the `state` is constructed it can be committed to the chain.
 
@@ -44,9 +46,9 @@ To commit the state, first, a chain needs to be built, and second, the cryptogra
 
 The chain can then be published or transmitted to other users by publishing the ``store`` and communicating the chain's ``head``. Other users will be able to interpret the chain using the ``View`` interface, described below.
 
-
+*******************
 Interpreting chains
--------------------
+*******************
 
 Having access to the store (dictionary) containing other user's chain, and a head of this user's chain, one can use the ``View`` interface.
 
