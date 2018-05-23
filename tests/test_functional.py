@@ -9,7 +9,7 @@ def test_read_claim_from_other_chain():
         alice_state = State()
         alice_store = {}
         alice_chain = Chain(alice_store, None)
-        alice_state.identity_info = "Hi, I'm " + pet2ascii(alice_params.dh.pk)
+        alice_state.identity_info = b"Hi, I'm " + pet2ascii(alice_params.dh.pk)
         with alice_params.as_default():
             alice_head = alice_state.commit(alice_chain)
         alice_chain = Chain(alice_store, alice_head)
@@ -18,7 +18,7 @@ def test_read_claim_from_other_chain():
         bob_state = State()
         bob_store = {}
         bob_chain = Chain(bob_store, None)
-        bob_state.identity_info = "Hi, I'm " + pet2ascii(bob_params.dh.pk)
+        bob_state.identity_info = b"Hi, I'm " + pet2ascii(bob_params.dh.pk)
         with bob_params.as_default():
             bob_head = bob_state.commit(bob_chain)
         bob_chain = Chain(bob_store, bob_head)
