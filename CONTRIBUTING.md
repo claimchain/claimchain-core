@@ -9,8 +9,8 @@ Be sure to have looked through the ClaimChain technical report to understand wha
 
 Run these commands:
 
-    git clone git@github.com:gdanezis/claimchain-core.git claimchain && cd claimchain
-    pip install -r requirements/dev.txt
+    git clone git@github.com:claimchain/claimchain-core.git claimchain && cd claimchain
+    pip install pytest
     pip install -e .
 
 You can use `pytest` for quick testing::

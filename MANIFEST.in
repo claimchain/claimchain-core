@@ -5,3 +5,8 @@ graft docs
 
 recursive-exclude docs/build *
 global-exclude *.py[co]
+
+include *.md
+include *.yml
+recursive-include requirements *.txt
+

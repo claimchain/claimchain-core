@@ -12,7 +12,7 @@ with open(path.join(here, 'README.rst'), encoding='utf-8') as f:
 
 setup(
     name='claimchain',
-    version='0.2.5',
+    version='0.2.6',
     packages=["claimchain", "claimchain.crypto", "claimchain.utils"],
     license='MIT',
     description='Implementation of ClaimChain, a cryptographic data structure',
@@ -34,7 +34,7 @@ setup(
         'base58',
         'statistics',
         'defaultcontext',
-        'hippiehug >= 0.1.1',
+        'hippiehug >= 0.1.3',
         'profiled'
     ],
 

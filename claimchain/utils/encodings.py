@@ -28,7 +28,7 @@ def ascii2bytes(s):
     >>> ascii2bytes('3yZe7d')
     b'test'
     """
-    return b58decode(s)
+    return b58decode(ensure_bytes(s))
 
 
 def pet2ascii(p):
@@ -47,4 +47,10 @@ def ascii2pet(s):
     >>> ascii2pet('3Xw3vNAdCmDLs')
     EcPt(00)
     """
-    return decode(b58decode(s))
+    return decode(b58decode(ensure_bytes(s)))
+
+
+def ensure_bytes(s):
+    if not isinstance(s, bytes):
+        s = s.encode("ascii")
+    return s
