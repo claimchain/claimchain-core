@@ -95,10 +95,8 @@ class LocalParams(object):
         :param dict exported: Exported params
         """
         def maybe_decode(encoded_point):
-            try:
+            if encoded_point is not None:
                 return ascii2pet(encoded_point)
-            except AttributeError:
-                pass
 
         def maybe_load_keypair(prefix):
             keypair = Keypair(

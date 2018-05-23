@@ -15,6 +15,12 @@ def ensure_binary(s):
     return s
 
 
+def ensure_text(s):
+    if not isinstance(s, six.text_type):
+        s = s.decode("ascii")
+    return s
+
+
 def bytes2ascii(s):
     """
     >>> bytes2ascii(b"test")
@@ -28,7 +34,7 @@ def ascii2bytes(s):
     >>> ascii2bytes('3yZe7d')
     b'test'
     """
-    return b58decode(ensure_bytes(s))
+    return b58decode(ensure_binary(s))
 
 
 def pet2ascii(p):
@@ -39,7 +45,7 @@ def pet2ascii(p):
     >>> pet2ascii(pt)
     '3Xw3vNAdCmDLs'
     """
-    return b58encode(encode(p))
+    return ensure_text(b58encode(encode(p)))
 
 
 def ascii2pet(s):
@@ -47,10 +53,4 @@ def ascii2pet(s):
     >>> ascii2pet('3Xw3vNAdCmDLs')
     EcPt(00)
     """
-    return decode(b58decode(ensure_bytes(s)))
-
-
-def ensure_bytes(s):
-    if not isinstance(s, bytes):
-        s = s.encode("ascii")
-    return s
+    return decode(b58decode(ensure_binary(s)))

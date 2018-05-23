@@ -1,3 +1,4 @@
+import json
 import pytest
 
 from petlib.ec import EcPt
@@ -39,7 +40,11 @@ def test_local_params_private_export(local_params):
     for key, val in public_exported.items():
         assert private_exported[key] == val
 
-    local_params1 = LocalParams.from_dict(private_exported)
+    # check that export contains no bytes and is json dumpable
+    data = json.dumps(private_exported)
+    imp = json.loads(data)
+
+    local_params1 = LocalParams.from_dict(imp)
 
     assert local_params1.vrf.sk == local_params.vrf.sk
     assert local_params1.sig.sk == local_params.sig.sk
