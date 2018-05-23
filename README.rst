@@ -32,6 +32,12 @@ To run tests, checkout the git repository and run tox::
     cd claimchain-core
     tox
 
+Usage warning
+=============
+
+This code is made for research purposes. It is not to be used in real-world systems.
+Not all security features are implemented, and some of the cryptographic instantiations
+need to be changed to more secure alternatives.
 
 Usage
 =====
@@ -125,13 +131,6 @@ structure. See the `web page <https://claimchain.github.io>`_ to learn about
 ClaimChain.
 
 Check out the `documentation <https://claimchain-core.readthedocs.io/en/latest>`_.
-
-Usage warning
-=============
-
-This code is made for research purposes. It is not to be used in real-world systems.
-Not all security features are implemented, and some of the cryptographic instantiations
-need to be changed to more secure alternatives.
 
 Acknowledgements
 ================
