@@ -12,13 +12,13 @@ from .crypto import PublicParams, LocalParams
 from .utils import ensure_binary
 
 
-def _compute_claim_key(vrf_value, mode='enc'):
+def _compute_claim_key(mode_key, mode='enc'):
     if mode not in ['enc', 'lookup']:
         raise ValueError('Invalid mode')
     pp = PublicParams.get_default()
     size = pp.enc_key_size if mode == 'enc' else pp.lookup_key_size
     mode = ensure_binary(mode)
-    return pp.hash_func(b"clm_%s|%s" % (mode, vrf_value)).digest()[:size]
+    return pp.hash_func(b"clm_%s|%s" % (mode, mode_key)).digest()[:size]
 
 
 def _compute_capability_key(nonce, shared_secret, claim_label, mode='enc'):
@@ -66,12 +66,13 @@ def get_capability_lookup_key(owner_dh_pk, nonce, claim_label):
 
 
 @profiled
-def encode_claim(nonce, claim_label, claim_content):
+def encode_claim(nonce, claim_label, claim_content, claim_k):
     """Encode claim.
 
     :param bytes nonce: Nonce
     :param bytes claim_label: Claim label
     :param bytes claim_content: Claim content
+    :param bytes claim_k: Claim encryption key
     """
     nonce = ensure_binary(nonce)
     claim_label = ensure_binary(claim_label)
@@ -81,19 +82,22 @@ def encode_claim(nonce, claim_label, claim_content):
     salted_label = _salt_label(nonce, claim_label)
     vrf = compute_vrf(salted_label)
     lookup_key = _compute_claim_key(vrf.value, mode='lookup')
-    enc_key = _compute_claim_key(vrf.value, mode='enc')
+    enc_key = _compute_claim_key(claim_k, mode='enc')
 
     claim = encode([vrf.proof, claim_content])
     enc_body, tag = pp.enc_cipher.quick_gcm_enc(
             enc_key, b"\x00"*pp.enc_key_size, claim)
     tag = _fix_bytes(tag)
+    
+    claim_k_commitment = pp.hash_func(claim_k).digest()
 
-    enc_claim = encode([enc_body, tag])
+    enc_claim = encode([enc_body, claim_k_commitment, tag])
     return (vrf.value, lookup_key, enc_claim)
 
 
 @profiled
-def decode_claim(owner_vrf_pk, nonce, claim_label, vrf_value, encrypted_claim):
+def decode_claim(owner_vrf_pk, nonce, claim_label, vrf_value,
+                 encrypted_claim, claim_k):
     """Decode claim.
 
     :param petlib.EcPt owner_vrf_pk: Owner's VRF public key
@@ -101,19 +105,23 @@ def decode_claim(owner_vrf_pk, nonce, claim_label, vrf_value, encrypted_claim):
     :param bytes claim_label: Claim label
     :param bytes vrf_value: Exported VRF value (hash)
     :param bytes encrypted_claim: Claim content
+    :param bytes claim_k: Claim encryption key
     """
     claim_label = ensure_binary(claim_label)
 
     pp = PublicParams.get_default()
     cipher = pp.enc_cipher
     salted_label = _salt_label(nonce, claim_label)
-    (encrypted_body, tag) = decode(encrypted_claim)
+    (encrypted_body, claim_k_commitment, tag) = decode(encrypted_claim)
 
     lookup_key = _compute_claim_key(vrf_value, mode='lookup')
-    enc_key = _compute_claim_key(vrf_value, mode='enc')
+    enc_key = _compute_claim_key(claim_k, mode='enc')
     raw_body = cipher.quick_gcm_dec(
             enc_key, b"\x00"*pp.enc_key_size, encrypted_body, tag)
     (proof, claim_content) = decode(raw_body)
+    
+    if not claim_k_commitment == pp.hash_func(claim_k).digest():
+        raise Exception("Wrong claim_k commitment")
 
     vrf = VrfContainer(value=vrf_value, proof=proof)
     if not verify_vrf(owner_vrf_pk, vrf, salted_label):
@@ -123,27 +131,32 @@ def decode_claim(owner_vrf_pk, nonce, claim_label, vrf_value, encrypted_claim):
 
 
 @profiled
-def encode_capability(reader_dh_pk, nonce, claim_label, vrf_value):
+def encode_capability(reader_dh_pk, nonce, claim_label, vrf_value, claim_k):
     """Encode capability.
 
     :param petlib.EcPt reader_dh_pk: Reader's VRF public key
     :param bytes nonce: Nonce
     :param bytes claim_label: Corresponding claim label
     :param bytes vrf_value: Exported VRF value (hash)
+    :param bytes claim_k: Claim encryption key
     """
     claim_label = ensure_binary(claim_label)
     pp = PublicParams.get_default()
     cipher = pp.enc_cipher
     params = LocalParams.get_default()
     shared_secret = params.dh.sk * reader_dh_pk
+    
+    nonce = ensure_binary(nonce)
 
     lookup_key = _compute_capability_key(
             nonce, shared_secret, claim_label, mode='lookup')
     enc_key = _compute_capability_key(
             nonce, shared_secret, claim_label, mode='enc')
+    
+    capability_content = encode([vrf_value, claim_k])
 
     enc_body, tag = cipher.quick_gcm_enc(
-            enc_key, b"\x00"*pp.enc_key_size, vrf_value)
+            enc_key, b"\x00"*pp.enc_key_size, capability_content)
     tag = _fix_bytes(tag)
 
     return lookup_key, encode([enc_body, tag])
@@ -165,8 +178,9 @@ def decode_capability(owner_dh_pk, nonce, claim_label, encrypted_capability):
     enc_key = _compute_capability_key(
             nonce, shared_secret, claim_label, mode='enc')
     enc_body, tag = decode(encrypted_capability)
-    vrf_value = cipher.quick_gcm_dec(
+    dec_body = cipher.quick_gcm_dec(
             enc_key, b"\x00"*pp.enc_key_size, enc_body, tag)
+    vrf_value, claim_k = decode(dec_body)
     claim_lookup_key = _compute_claim_key(vrf_value, mode='lookup')
-    return vrf_value, claim_lookup_key
+    return vrf_value, claim_lookup_key, claim_k
 

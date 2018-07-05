@@ -18,8 +18,8 @@ from hippiehug import Tree
 
 from .core import get_capability_lookup_key
 from .core import encode_capability, decode_capability
-from .core import encode_claim, decode_claim
-from .core import _compute_claim_key
+from .core import encode_claim, decode_claim, compute_vrf
+from .core import _compute_claim_key, _salt_label
 from .crypto import PublicParams, LocalParams
 from .crypto import sign, verify_signature
 from .utils import bytes2ascii, ascii2bytes, pet2ascii, ascii2pet
@@ -123,6 +123,7 @@ class State(object):
         self._caps_by_reader_pk = defaultdict(set)
         self._enc_items_map = {}
         self._vrf_value_by_label = {}
+        self._claim_k_by_label = {}
         self._payload = None
         self._tree = None
 
@@ -151,11 +152,14 @@ class State(object):
         # Encode claims
         enc_items_map = {}
         vrf_value_by_label = {}
+        claim_k_by_label = {}
         for claim_label, claim_content in self._claim_content_by_label.items():
+            claim_k = os.urandom(PublicParams.get_default().enc_key_size)
             vrf_value, lookup_key, enc_claim = encode_claim(
-                    nonce, claim_label, claim_content)
+                    nonce, claim_label, claim_content, claim_k)
             enc_items_map[lookup_key] = enc_claim
             vrf_value_by_label[claim_label] = vrf_value
+            claim_k_by_label[claim_label] = claim_k
 
         # Encode capabilities
         for reader_dh_pk, caps in self._caps_by_reader_pk.items():
@@ -167,8 +171,8 @@ class State(object):
                                   "Skipping adding a capability." \
                                   % claim_label)
                     break
-                lookup_key, enc_cap = encode_capability(
-                        reader_dh_pk, nonce, claim_label, vrf_value)
+                lookup_key, enc_cap = encode_capability(reader_dh_pk, nonce,
+                        claim_label, vrf_value, claim_k_by_label[claim_label])
                 enc_items_map[lookup_key] = enc_cap
 
         # Put all the encrypted items in a new tree
@@ -185,6 +189,7 @@ class State(object):
         self._tree = tree
         self._enc_items_map = enc_items_map
         self._vrf_value_by_label = vrf_value_by_label
+        self._claim_k_by_label = claim_k_by_label
 
         return target_chain.head
 
@@ -222,6 +227,7 @@ class State(object):
 
         self._enc_items_map.clear()
         self._vrf_value_by_label.clear()
+        self._claim_k_by_label.clear()
         self._payload = None
         self._tree = None
 
@@ -267,7 +273,7 @@ class State(object):
 class View(object):
     """View of an existing ClaimChain."""
 
-    def __init__(self, source_chain, source_tree=None):
+    def __init__(self, source_chain, source_tree=None, claim_k_by_label=None):
         """
         :param hippiehug.Chain source_chain: Chain to view
         :param utils.Tree source_tree: Tree object if available
@@ -283,6 +289,7 @@ class View(object):
 
             if ascii2bytes(self.payload.mtr_hash) != self.tree.root_hash:
                 raise ValueError("Supplied tree doesn't match MTR in the chain.")
+        self._claim_k_by_label = claim_k_by_label or {}
 
     @property
     def head(self):
@@ -328,7 +335,7 @@ class View(object):
         return decode_capability(self.params.dh.pk, self._nonce,
                                  claim_label, cap)
 
-    def _lookup_claim(self, claim_label, vrf_value, claim_lookup_key):
+    def _lookup_claim(self, claim_label, vrf_value, claim_lookup_key, claim_k):
         try:
             enc_claim = self.tree[claim_lookup_key]
         except KeyError:
@@ -337,7 +344,7 @@ class View(object):
         except AttributeError:
             raise ValueError("The chain does not have a claim map.")
         return decode_claim(self.params.vrf.pk, self._nonce,
-                            claim_label, vrf_value, enc_claim)
+                            claim_label, vrf_value, enc_claim, claim_k)
 
     def __getitem__(self, claim_label):
         """Get claim by label.
@@ -346,12 +353,16 @@ class View(object):
         :raises: ``KeyError`` if claim not found or not accessible
         """
         if self._viewer_params.vrf.pk == self.params.vrf.pk:
-            vrf_value, claim_lookup_key, enc_claim = encode_claim(
-                    self._nonce, claim_label, "")
-            claim = self._lookup_claim(claim_label, vrf_value, claim_lookup_key)
+            salted_label = _salt_label(self._nonce, claim_label)
+            vrf_value = compute_vrf(salted_label)
+            claim_lookup_key = _compute_claim_key(vrf_value.value, 'lookup')
+            claim = self._lookup_claim(claim_label, vrf_value.value,
+                claim_lookup_key, self._claim_k_by_label[claim_label])
         else:
-            vrf_value, claim_lookup_key = self._lookup_capability(claim_label)
-            claim = self._lookup_claim(claim_label, vrf_value, claim_lookup_key)
+            vrf_value, claim_lookup_key, claim_k = \
+                                self._lookup_capability(claim_label)
+            claim = self._lookup_claim(claim_label, vrf_value,
+                                claim_lookup_key, claim_k)
         return claim
 
     def get(self, claim_label):

@@ -78,11 +78,11 @@ def commit_claims(state, claims, caps=None):
     # Get associated Merkle tree
     mtr_hash = ascii2bytes(block_content['mtr_hash'])
     tree = hippiehug.Tree(store, root_hash=mtr_hash)
-    return nonce, chain, tree
+    return nonce, chain, tree, state._claim_k_by_label
 
 
 def test_tree_contains_claim_lookup_key(state):
-    nonce, chain, tree = commit_claims(state, [("marios", "test")])
+    nonce, chain, tree, _ = commit_claims(state, [("marios", "test")])
 
     salted_label = _salt_label(nonce, "marios")
     vrf = compute_vrf(salted_label)
@@ -99,7 +99,7 @@ def test_tree_contains_cap_lookup_key(state):
     reader_pk = reader_params.dh.pk
     state.grant_access(reader_pk, ["marios"])
 
-    nonce, chain, tree = commit_claims(state, [("marios", "test")])
+    nonce, chain, tree, _ = commit_claims(state, [("marios", "test")])
 
     owner_pk = LocalParams.get_default().dh.pk
     with reader_params.as_default():
@@ -115,7 +115,7 @@ def test_evidence(state):
     reader_pk = reader_params.dh.pk
     state.grant_access(reader_pk, ["marios"])
 
-    nonce, chain, tree = commit_claims(state, [("marios", "test")])
+    nonce, chain, tree, _ = commit_claims(state, [("marios", "test")])
     evidence = state.compute_evidence_keys(reader_pk, "marios")
     assert len(evidence) > 0
 
@@ -129,7 +129,7 @@ def test_evidence(state):
 
 def test_view_missing_and_non_existent_label(state):
     reader_params = LocalParams.generate()
-    _, chain, tree = commit_claims(state,
+    _, chain, tree, _ = commit_claims(state,
             [("marios", "test1"), ("bogdan", "test2")],
             [(reader_params.dh.pk, ["marios"])])
 
@@ -143,11 +143,11 @@ def test_view_missing_and_non_existent_label(state):
 
 def test_view_label_retrieval(state):
     reader_params = LocalParams.generate()
-    _, chain, tree = commit_claims(state,
-            [("marios", "test1"), ("bogdan", "test2")],
+    _, chain, tree, claim_k_by_label = commit_claims(state,
+            [("marios", "test1"), ("bogdan", "test2"), ("carmela", "test3")],
             [(reader_params.dh.pk, ["marios", "bogdan"])])
 
-    own_view = View(chain)
+    own_view = View(chain, claim_k_by_label=claim_k_by_label)
     assert own_view["marios"] == b"test1"
     assert own_view["bogdan"] == b"test2"
 
@@ -155,3 +155,5 @@ def test_view_label_retrieval(state):
         view = View(chain)
         assert view["marios"] == b"test1"
         assert view["bogdan"] == b"test2"
+        #with self.assertRaises(KeyError):
+        #    assert view["carmela"] == b"test3"
