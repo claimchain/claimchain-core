@@ -10,27 +10,26 @@ from claimchain.crypto import PublicParams, LocalParams
 
 
 def test_encode_claim_correctness():
-    nonce = b"42"
-    claim_label = b"george@george.com"
-    claim_body = b"This is a test claim"
-    claim_k = os.urandom(PublicParams.get_default().enc_key_size)
+    nonce = b'42'
+    claim_label = b'george@george.com'
+    claim_body = b'This is a test claim'
 
     with LocalParams.generate().as_default() as params:
-        enc = encode_claim(nonce, claim_label, claim_body, claim_k)
-        vrf_value, lookup_key, encrypted_body = enc
+        enc = encode_claim(claim_label, claim_body, nonce)
+        vrf_value, claim_key, proof_key, lookup_key, encoded_claim = enc
 
-        claim2 = decode_claim(params.vrf.pk, nonce, claim_label,
-                              vrf_value, encrypted_body, claim_k)
-        assert claim2 == claim_body
+        claim_prime = decode_claim(params.vrf.pk, vrf_value, claim_label, claim_key,
+                                   proof_key, encoded_claim, nonce)
+        assert claim_prime == claim_body
 
 
 def test_encode_cap_correctness():
     owner_params = LocalParams.generate()
     reader_params = LocalParams.generate()
 
-    nonce = b"42"
-    claim_label = b"marios@marios.com"
-    vrf_value = b"1337"
+    nonce = '42'
+    claim_label = 'marios@marios.com'
+    vrf_value = '1337'
     claim_k = os.urandom(PublicParams.get_default().enc_key_size)
 
     with owner_params.as_default():
@@ -51,3 +50,4 @@ def test_encode_cap_correctness():
 
     claim_lookup_key = _compute_claim_key(vrf_value, mode='lookup')
     assert claim_lookup_key == claim_lookup_key2
+
