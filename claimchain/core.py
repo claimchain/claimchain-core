@@ -14,16 +14,17 @@ from .crypto import PublicParams, LocalParams
 from .utils import ensure_binary
 
 
-def _compute_claim_key(mode_key, mode='enc'):
+def _compute_claim_key(key, mode='enc'):
     if mode not in ['enc', 'lookup']:
         raise ValueError('Invalid mode')
     pp = PublicParams.get_default()
     size = pp.enc_key_size if mode == 'enc' else pp.lookup_key_size
     mode = ensure_binary(mode)
-    return pp.hash_func(b"clm_%s|%s" % (mode, mode_key)).digest()[:size]
+    key = ensure_binary(key)
+    return pp.hash_func(b"clm_%s|%s" % (mode, key)).digest()[:size]
 
 
-def _compute_capability_key(nonce, shared_secret, claim_label, mode='enc'):
+def _compute_capability_key(shared_secret, claim_label, nonce, mode='enc'):
     if mode not in ['enc', 'lookup']:
         ValueError('Invalid mode')
     pp = PublicParams.get_default()
@@ -37,7 +38,7 @@ def _compute_capability_key(nonce, shared_secret, claim_label, mode='enc'):
             .digest()[:size]
 
 
-def _salt_label(nonce, claim_label):
+def _salt_label(claim_label, nonce):
     nonce = ensure_binary(nonce)
     claim_label = ensure_binary(claim_label)
     return b"lab_%s.%s" % (nonce, claim_label)
@@ -64,7 +65,7 @@ def get_capability_lookup_key(owner_dh_pk, claim_label, nonce):
     shared_secret = params.dh.sk * owner_dh_pk
     shared_secret_key = pp.hash_func(shared_secret.export()).digest()
     return _compute_capability_key(
-            nonce, shared_secret, claim_label, mode='lookup')
+            shared_secret, claim_label, nonce, mode='lookup')
 
 
 @profiled
@@ -75,12 +76,10 @@ def encode_claim(claim_label, claim_content, nonce):
     :param bytes claim_content: Claim content
     :param bytes nonce: Nonce
     """
-    nonce = ensure_binary(nonce)
-    claim_label = ensure_binary(claim_label)
     claim_content = ensure_binary(claim_content)
 
     pp = PublicParams.get_default()
-    salted_label = _salt_label(nonce, claim_label)
+    salted_label = _salt_label(claim_label, nonce)
     claim_proof = compute_claim_proof(salted_label, claim_content)
     lookup_key = _compute_claim_key(claim_proof.vrf_value, mode='lookup')
 
@@ -105,15 +104,14 @@ def decode_claim(owner_vrf_pk, vrf_value, claim_label, claim_key, proof_key,
     :param petlib.EcPt owner_vrf_pk: Owner's VRF public key
     :param bytes vrf_value: Exported VRF value (hash)
     :param bytes claim_label: Claim label
-    :param bytes claim_key: Claim key
+    :param bytes claim_key: Claim encryption key
+    :param bytes proof_key: Claim proof key
     :param bytes encoded_claim: Encoded claim
     :param bytes nonce: Nonce
     """
-    claim_label = ensure_binary(claim_label)
-
     pp = PublicParams.get_default()
     cipher = pp.enc_cipher
-    salted_label = _salt_label(nonce, claim_label)
+    salted_label = _salt_label(claim_label, nonce)
     (encrypted_body, com, tag) = decode(encoded_claim)
 
     enc_key = _compute_claim_key(claim_key, mode='enc')
@@ -135,56 +133,55 @@ def decode_claim(owner_vrf_pk, vrf_value, claim_label, claim_key, proof_key,
 
 
 @profiled
-def encode_capability(reader_dh_pk, nonce, claim_label, vrf_value, claim_k):
+def encode_capability(reader_dh_pk, claim_label, vrf_value, claim_key,
+                      proof_key, nonce):
     """Encode capability.
 
     :param petlib.EcPt reader_dh_pk: Reader's VRF public key
-    :param bytes nonce: Nonce
     :param bytes claim_label: Corresponding claim label
     :param bytes vrf_value: Exported VRF value (hash)
-    :param bytes claim_k: Claim encryption key
+    :param bytes claim_key: Claim encryption key
+    :param bytes proof_key: Claim proof key
+    :param bytes nonce: Nonce
     """
-    claim_label = ensure_binary(claim_label)
     pp = PublicParams.get_default()
     cipher = pp.enc_cipher
     params = LocalParams.get_default()
     shared_secret = params.dh.sk * reader_dh_pk
 
-    nonce = ensure_binary(nonce)
-
-    lookup_key = _compute_capability_key(
-            nonce, shared_secret, claim_label, mode='lookup')
+    cap_lookup_key = _compute_capability_key(
+            shared_secret, claim_label, nonce, mode='lookup')
     enc_key = _compute_capability_key(
-            nonce, shared_secret, claim_label, mode='enc')
+            shared_secret, claim_label, nonce, mode='enc')
 
-    capability_content = encode([vrf_value, claim_k])
+    cap_content = encode([vrf_value, claim_key, proof_key])
 
     enc_body, tag = cipher.quick_gcm_enc(
-            enc_key, b"\x00"*pp.enc_key_size, capability_content)
+            enc_key, b"\x00"*pp.enc_key_size, cap_content)
     tag = _fix_bytes(tag)
 
-    return lookup_key, encode([enc_body, tag])
+    return cap_lookup_key, encode([enc_body, tag])
 
 
 @profiled
-def decode_capability(owner_dh_pk, nonce, claim_label, encrypted_capability):
+def decode_capability(owner_dh_pk, claim_label, encoded_cap, nonce):
     """Decode capability.
 
     :param petlib.EcPt owner_dh_pk: Owder's VRF public key
-    :param bytes nonce: Nonce
     :param bytes claim_label: Corresponding claim label
-    :param bytes encrypted_capability: Encrypted capability
+    :param bytes encoded_cap: Encoded capability
+    :param bytes nonce: Nonce
     """
     pp = PublicParams.get_default()
     cipher = pp.enc_cipher
     params = LocalParams.get_default()
     shared_secret = params.dh.sk * owner_dh_pk
     enc_key = _compute_capability_key(
-            nonce, shared_secret, claim_label, mode='enc')
-    enc_body, tag = decode(encrypted_capability)
-    dec_body = cipher.quick_gcm_dec(
+            shared_secret, claim_label, nonce, mode='enc')
+    enc_body, tag = decode(encoded_cap)
+    raw_body = cipher.quick_gcm_dec(
             enc_key, b"\x00"*pp.enc_key_size, enc_body, tag)
-    vrf_value, claim_k = decode(dec_body)
+    vrf_value, claim_key, proof_key = decode(raw_body)
     claim_lookup_key = _compute_claim_key(vrf_value, mode='lookup')
-    return vrf_value, claim_lookup_key, claim_k
+    return claim_lookup_key, vrf_value, claim_key, proof_key
 
