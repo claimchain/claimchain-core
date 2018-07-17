@@ -1,12 +1,13 @@
 """
-Containers for key material.
+Containers for cryptographic key material.
 """
 
+import os
 import base64
+import attr
 
 from hashlib import sha256
 
-from attr import asdict, attrs, attrib, Factory
 from defaultcontext import with_default_context
 from petlib.cipher import Cipher
 from petlib.ec import EcGroup, EcPt
@@ -16,38 +17,56 @@ from claimchain.utils import pet2ascii, ascii2pet
 
 
 @with_default_context(use_empty_init=True)
-@attrs
+@attr.s
 class PublicParams(object):
     """Public parameters of the system."""
-    ec_group = attrib(default=Factory(EcGroup))
-    hash_func = attrib(default=Factory(lambda: sha256))
-    enc_cipher = attrib(default=Factory(lambda: Cipher("aes-128-gcm")))
-    enc_key_size = attrib(default=16)
-    lookup_key_size = attrib(default=8)
-    nonce_size = attrib(default=16)
+    ec_group = attr.ib(default=attr.Factory(EcGroup))
+    hash_func = attr.ib(default=attr.Factory(lambda: sha256))
+    enc_cipher = attr.ib(default=attr.Factory(lambda: Cipher("aes-128-gcm")))
+    enc_key_size = attr.ib(default=16)
+    prf_key_size = attr.ib(default=16)
+    lookup_key_size = attr.ib(default=8)
+    nonce_size = attr.ib(default=16)
 
 
-@attrs
+@attr.s
 class Keypair(object):
     """Asymmetric key pair.
 
     :param pk: Public key
     :param sk: Private key
     """
-    pk = attrib()
-    sk = attrib(default=None)
+    pk = attr.ib()
+    sk = attr.ib(default=None)
 
     @staticmethod
     def generate():
         """Generate a key pair."""
         pp = PublicParams.get_default()
         G = pp.ec_group
-        s = G.order().random()
-        return Keypair(sk=s, pk=s * G.generator())
+        sk = G.order().random()
+        pk = sk * G.generator()
+        return Keypair(sk=sk, pk=pk)
+
+
+@attr.s
+class PrfKey(object):
+    """Symmetric PRF key.
+
+    :param sk: The key
+    """
+    sk = attr.ib()
+
+    @staticmethod
+    def generate():
+        """Generate a key."""
+        pp = PublicParams.get_default()
+        sk = os.urandom(pp.prf_key_size)
+        return PrfKey(sk=sk)
 
 
 @with_default_context
-@attrs
+@attr.s
 class LocalParams(object):
     """ClaimChain user's cryptographic material.
 
@@ -56,18 +75,21 @@ class LocalParams(object):
     :param Keypair dh: DH key pair
     :param Keypair rescue: Rescue key pair (not used)
     """
-    vrf = attrib(default=None)
-    sig = attrib(default=None)
-    dh = attrib(default=None)
-    rescue = attrib(default=None)
+    vrf = attr.ib(default=None)
+    sig = attr.ib(default=None)
+    dh = attr.ib(default=None)
+    prf = attr.ib(default=None)
+    rescue = attr.ib(default=None)
 
     @staticmethod
     def generate():
         """Generate key pairs."""
+        pp = PublicParams.get_default()
         return LocalParams(
             vrf = Keypair.generate(),
             sig = Keypair.generate(),
             dh = Keypair.generate(),
+            prf = PrfKey.generate(),
             rescue = Keypair.generate()
         )
 
@@ -86,6 +108,9 @@ class LocalParams(object):
                 result[name + '_pk'] = pet2ascii(attr.pk)
                 if private:
                     result[name + '_sk'] = pet2ascii(attr.sk)
+            elif isinstance(attr, PrfKey) and private:
+                result[name + '_sk'] = attr.sk
+
         return result
 
     @staticmethod
@@ -105,10 +130,16 @@ class LocalParams(object):
             if keypair.pk is not None or keypair.sk is not None:
                 return keypair
 
+        def maybe_load_prf_key(prefix):
+            keypair = PrfKey(sk=exported.get(prefix + '_sk'))
+            if keypair.sk is not None:
+                return keypair
+
         params = LocalParams()
         params.vrf = maybe_load_keypair('vrf')
         params.sig = maybe_load_keypair('sig')
         params.dh = maybe_load_keypair('dh')
+        params.prf = maybe_load_prf_key('prf')
         params.rescue = maybe_load_keypair('rescue')
         return params
 

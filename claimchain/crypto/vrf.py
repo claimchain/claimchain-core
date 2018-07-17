@@ -10,6 +10,7 @@ from profiled import profiled
 
 from hashlib import sha256
 
+from .utils import hash_to_bn
 from .params import PublicParams, LocalParams
 
 
@@ -45,8 +46,8 @@ def compute_vrf(message):
     r = G.order().random()
     R = r * g
     Hr = r * h
-    s = Bn.from_binary(sha256(encode([g, h, pub, v, R, Hr])).digest())
-    t = (r - s * k) % G.order()
+    s = hash_to_bn(encode([g, h, pub, v, R, Hr]))
+    t = r.mod_sub(s * k, G.order())
     return VrfContainer(value=v.export(), proof=encode((s, t)))
 
 
@@ -70,5 +71,6 @@ def verify_vrf(pub, vrf, message):
     s, t = decode(vrf.proof)
     R = t*g + s*pub
     Hr = t*h + s*v
-    s2 = Bn.from_binary(sha256(encode([g, h, pub, v, R, Hr])).digest())
-    return s2 == s
+    s_prime = hash_to_bn(encode([g, h, pub, v, R, Hr]))
+    return s_prime == s
+

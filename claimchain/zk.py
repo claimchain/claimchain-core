@@ -13,6 +13,7 @@ from profiled import profiled
 from hashlib import sha512, sha256
 
 from .crypto.params import PublicParams, LocalParams
+from .crypto.utils import hash_to_bn
 from .utils import ensure_binary
 
 
@@ -52,8 +53,9 @@ def compute_claim_proof(nonce, claim_label, claim_body):
 
     h = sk * z
 
-    alpha = G.order().random()
-    bind = Bn.from_binary(sha256(claim_body).digest()) * a
+    alpha = hash_to_bn(
+            local_params.prf.sk + nonce + claim_label + claim_body)
+    bind = hash_to_bn(claim_body) * a
     com = alpha * b + bind
 
     r_sk = G.order().random()
@@ -71,9 +73,9 @@ def compute_claim_proof(nonce, claim_label, claim_body):
         proof_key
     ]
 
-    c = Bn.from_binary(sha512(encode(packed_challenge)).digest())
-    s_sk = (r_sk - c * sk) % G.order()
-    s_alpha = (r_alpha - c * alpha) % G.order()
+    c = hash_to_bn(encode(packed_challenge))
+    s_sk = r_sk.mod_sub(c * sk, G.order())
+    s_alpha = r_alpha.mod_sub(c * alpha, G.order())
     return ClaimProofContainer(
             vrf_value=h,
             commitment=com,
@@ -107,7 +109,7 @@ def verify_claim_proof(owner_vrf_pk, nonce, claim_proof, claim_label, claim_body
     R_pk = s_sk * g + c * owner_vrf_pk
     R_h = s_sk * z + c * claim_proof.vrf_value
 
-    bind = Bn.from_binary(sha256(claim_body).digest()) * a
+    bind = hash_to_bn(claim_body) * a
     R_com = s_alpha * b + c * (claim_proof.commitment - bind)
 
     packed_challenge = [
@@ -116,6 +118,6 @@ def verify_claim_proof(owner_vrf_pk, nonce, claim_proof, claim_label, claim_body
         R_pk, R_h, R_com,
         claim_proof.proof_key
     ]
-    c_1 = Bn.from_binary(sha512(encode(packed_challenge)).digest())
-    return c_1 == c
+    c_prime = hash_to_bn(encode(packed_challenge))
+    return c_prime == c
 
