@@ -25,22 +25,22 @@ class ClaimProofContainer(object):
     proof = attr.ib()
 
 
-def compute_claim_proof(nonce, claim_label, claim_body):
+def compute_claim_proof(claim_label, claim_content, nonce):
     """Compute a claim proof.
 
     Produces a VRF proof of the lookup key and the signature ZK proof
     of the claim content commitment correctness.
 
-    :param bytes nonce: Nonce
     :param bytes claim_label: Claim label
-    :param bytes claim_body: Claim body
+    :param bytes claim_content: Claim body
+    :param bytes nonce: Nonce
     """
 
     pp = PublicParams.get_default()
     local_params = LocalParams.get_default()
     nonce = ensure_binary(nonce)
     claim_label = ensure_binary(claim_label)
-    claim_body = ensure_binary(claim_body)
+    claim_content = ensure_binary(claim_content)
 
     G = pp.ec_group
     g = G.generator()
@@ -54,8 +54,8 @@ def compute_claim_proof(nonce, claim_label, claim_body):
     h = sk * z
 
     alpha = hash_to_bn(
-            local_params.prf.sk + nonce + claim_label + claim_body)
-    bind = hash_to_bn(claim_body) * a
+            local_params.prf.sk + nonce + claim_label + claim_content)
+    bind = hash_to_bn(claim_content) * a
     com = alpha * b + bind
 
     r_sk = G.order().random()
@@ -77,27 +77,28 @@ def compute_claim_proof(nonce, claim_label, claim_body):
     s_sk = r_sk.mod_sub(c * sk, G.order())
     s_alpha = r_alpha.mod_sub(c * alpha, G.order())
     return ClaimProofContainer(
-            vrf_value=h,
-            commitment=com,
+            vrf_value=h.export(),
+            commitment=com.export(),
             proof_key=proof_key,
-            proof=(c, s_sk, s_alpha))
+            proof=encode([c, s_sk, s_alpha]))
 
 
-def verify_claim_proof(owner_vrf_pk, nonce, claim_proof, claim_label, claim_body):
+def verify_claim_proof(owner_vrf_pk, claim_proof, claim_label, claim_content,
+                       nonce):
     """Verify the claim proof.
 
     :param owner_vrf_pk: Owner's VRF pk
-    :param bytes nonce: Random nonce
     :param ClaimProofContainer claim_proof: Claim proof
     :param bytes claim_label: Claim label
-    :param bytes claim_body: Claim body
+    :param bytes claim_content: Claim body
+    :param bytes nonce: Random nonce
     """
 
     pp = PublicParams.get_default()
     local_params = LocalParams.get_default()
     nonce = ensure_binary(nonce)
     claim_label = ensure_binary(claim_label)
-    claim_body = ensure_binary(claim_body)
+    claim_content = ensure_binary(claim_content)
 
     G = pp.ec_group
     g = G.generator()
@@ -105,18 +106,23 @@ def verify_claim_proof(owner_vrf_pk, nonce, claim_proof, claim_label, claim_body
     b = G.hash_to_point(b'b')
     z = G.hash_to_point(nonce + claim_label)
 
-    c, s_sk, s_alpha = claim_proof.proof
-    R_pk = s_sk * g + c * owner_vrf_pk
-    R_h = s_sk * z + c * claim_proof.vrf_value
+    vrf_value = EcPt.from_binary(claim_proof.vrf_value, G)
+    com = EcPt.from_binary(claim_proof.commitment, G)
+    proof_key = claim_proof.proof_key
+    proof = decode(claim_proof.proof)
 
-    bind = hash_to_bn(claim_body) * a
-    R_com = s_alpha * b + c * (claim_proof.commitment - bind)
+    c, s_sk, s_alpha = proof
+    R_pk = s_sk * g + c * owner_vrf_pk
+    R_h = s_sk * z + c * vrf_value
+
+    bind = hash_to_bn(claim_content) * a
+    R_com = s_alpha * b + c * (com - bind)
 
     packed_challenge = [
         g, z, a, b,
-        owner_vrf_pk, claim_proof.vrf_value, claim_proof.commitment, bind,
+        owner_vrf_pk, vrf_value, com, bind,
         R_pk, R_h, R_com,
-        claim_proof.proof_key
+        proof_key
     ]
     c_prime = hash_to_bn(encode(packed_challenge))
     return c_prime == c
