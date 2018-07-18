@@ -282,7 +282,6 @@ class View(object):
         :param hippiehug.Chain source_chain: Chain to view
         :param utils.Tree source_tree: Tree object if available
         """
-        self._viewer_params = LocalParams.get_default()
         self.chain = source_chain
         self._latest_block = self.chain.store[self.chain.head]
         self._nonce = ascii2bytes(self.payload.nonce)
@@ -357,7 +356,7 @@ class View(object):
         :raises: ``KeyError`` if claim not found or not accessible
         """
         # Recompute the VRF value if have access to the sk.
-        if self._viewer_params.vrf.pk == self.params.vrf.pk:
+        if LocalParams.get_default().vrf.pk == self.params.vrf.pk:
             pp = PublicParams.get_default()
             salted_label = _salt_label(claim_label, self._nonce)
             vrf_bundle = compute_vrf(salted_label)

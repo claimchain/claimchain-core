@@ -24,6 +24,7 @@ class ClaimProofContainer(object):
     proof = attr.ib()
 
 
+@profiled
 def compute_claim_proof(salted_label, claim_content, proof_key):
     """Compute a claim proof.
 
@@ -80,6 +81,7 @@ def compute_claim_proof(salted_label, claim_content, proof_key):
             proof=encode([c, s_sk, s_alpha]))
 
 
+@profiled
 def verify_claim_proof(owner_vrf_pk, claim_proof, salted_label,
                        claim_content, proof_key):
     """Verify the claim proof.
