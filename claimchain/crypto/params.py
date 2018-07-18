@@ -13,14 +13,15 @@ from petlib.cipher import Cipher
 from petlib.ec import EcGroup, EcPt
 from petlib.pack import encode, decode
 
-from claimchain.utils import pet2ascii, ascii2pet
+from claimchain.utils import pet2ascii, ascii2pet, bytes2ascii, ensure_binary
 
 
 @with_default_context(use_empty_init=True)
 @attr.s
 class PublicParams(object):
     """Public parameters of the system."""
-    ec_group = attr.ib(default=attr.Factory(EcGroup))
+    # The default EC curve is "secp256k1" (Bitcoin)
+    ec_group = attr.ib(default=attr.Factory(lambda: EcGroup(nid=714)))
     hash_func = attr.ib(default=attr.Factory(lambda: sha256))
     enc_cipher = attr.ib(default=attr.Factory(lambda: Cipher("aes-128-gcm")))
     enc_key_size = attr.ib(default=16)
@@ -103,13 +104,13 @@ class LocalParams(object):
 
     def _export(self, private=False):
         result = {}
-        for name, attr in asdict(self, recurse=False).items():
-            if isinstance(attr, Keypair):
-                result[name + '_pk'] = pet2ascii(attr.pk)
+        for name, val in attr.asdict(self, recurse=False).items():
+            if isinstance(val, Keypair):
+                result[name + '_pk'] = pet2ascii(val.pk)
                 if private:
-                    result[name + '_sk'] = pet2ascii(attr.sk)
-            elif isinstance(attr, PrfKey) and private:
-                result[name + '_sk'] = attr.sk
+                    result[name + '_sk'] = pet2ascii(val.sk)
+            elif isinstance(val, PrfKey) and private:
+                result[name + '_sk'] = bytes2ascii(val.sk)
 
         return result
 
@@ -133,6 +134,7 @@ class LocalParams(object):
         def maybe_load_prf_key(prefix):
             keypair = PrfKey(sk=exported.get(prefix + '_sk'))
             if keypair.sk is not None:
+                keypair.sk = ensure_binary(keypair.sk)
                 return keypair
 
         params = LocalParams()

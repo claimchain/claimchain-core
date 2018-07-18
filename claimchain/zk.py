@@ -21,11 +21,10 @@ from .utils import ensure_binary
 class ClaimProofContainer(object):
     vrf_value = attr.ib()
     commitment = attr.ib()
-    proof_key = attr.ib()
     proof = attr.ib()
 
 
-def compute_claim_proof(salted_label, claim_content):
+def compute_claim_proof(salted_label, claim_content, proof_key):
     """Compute a claim proof.
 
     Produces a VRF proof of the lookup key and the signature ZK proof
@@ -33,13 +32,14 @@ def compute_claim_proof(salted_label, claim_content):
 
     :param bytes salted_label: Claim label concatenated with a nonce
     :param bytes claim_content: Claim body
-    :param bytes nonce: Nonce
+    :param bytes proof_key: Proof key
     """
 
     pp = PublicParams.get_default()
     local_params = LocalParams.get_default()
     salted_label = ensure_binary(salted_label)
     claim_content = ensure_binary(claim_content)
+    proof_key = ensure_binary(proof_key)
 
     G = pp.ec_group
     g = G.generator()
@@ -53,13 +53,12 @@ def compute_claim_proof(salted_label, claim_content):
     h = sk * z
 
     alpha = hash_to_bn(
-            local_params.prf.sk + salted_label + claim_content)
+            local_params.prf.sk + salted_label)
     bind = hash_to_bn(claim_content) * a
     com = alpha * b + bind
 
     r_sk = G.order().random()
     r_alpha = G.order().random()
-    proof_key = os.urandom(pp.nonce_size)
 
     R_pk = r_sk * g
     R_h = r_sk * z
@@ -78,23 +77,25 @@ def compute_claim_proof(salted_label, claim_content):
     return ClaimProofContainer(
             vrf_value=h.export(),
             commitment=com.export(),
-            proof_key=proof_key,
             proof=encode([c, s_sk, s_alpha]))
 
 
-def verify_claim_proof(owner_vrf_pk, claim_proof, salted_label, claim_content):
+def verify_claim_proof(owner_vrf_pk, claim_proof, salted_label,
+                       claim_content, proof_key):
     """Verify the claim proof.
 
     :param owner_vrf_pk: Owner's VRF pk
     :param ClaimProofContainer claim_proof: Claim proof
     :param bytes salted_label: Claim label concatenated with a nonce
     :param bytes claim_content: Claim body
+    :param bytes proof_key: Proof key
     """
 
     pp = PublicParams.get_default()
     local_params = LocalParams.get_default()
     salted_label = ensure_binary(salted_label)
     claim_content = ensure_binary(claim_content)
+    proof_key = ensure_binary(proof_key)
 
     G = pp.ec_group
     g = G.generator()
@@ -104,7 +105,6 @@ def verify_claim_proof(owner_vrf_pk, claim_proof, salted_label, claim_content):
 
     vrf_value = EcPt.from_binary(claim_proof.vrf_value, G)
     com = EcPt.from_binary(claim_proof.commitment, G)
-    proof_key = claim_proof.proof_key
     proof = decode(claim_proof.proof)
 
     c, s_sk, s_alpha = proof

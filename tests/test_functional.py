@@ -3,6 +3,7 @@ from claimchain import State, View
 from hippiehug import Chain
 from claimchain.utils import pet2ascii
 
+
 def test_read_claim_from_other_chain():
     for i in range(1,100):
         alice_params = LocalParams.generate()
@@ -32,9 +33,7 @@ def test_read_claim_from_other_chain():
         alice_chain = Chain(alice_store, alice_head)
 
         with alice_params.as_default():
-            value = View(alice_chain,
-                        claim_k_by_label=alice_state._claim_k_by_label) \
-                                    [b'bobs_key'].decode('utf-8')
+            value = View(alice_chain)[b'bobs_key'].decode('utf-8')
 
         assert value == "123abc"
 

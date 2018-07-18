@@ -10,8 +10,9 @@ from profiled import profiled
 
 from hashlib import sha256
 
-from .utils import hash_to_bn
-from .params import PublicParams, LocalParams
+from claimchain.utils import ensure_binary
+from claimchain.crypto.utils import hash_to_bn
+from claimchain.crypto.params import PublicParams, LocalParams
 
 
 @attrs
@@ -36,41 +37,47 @@ def compute_vrf(message):
     """
     pp = PublicParams.get_default()
     local_params = LocalParams.get_default()
+    message = ensure_binary(message)
 
     G = pp.ec_group
     g = G.generator()
-    k = local_params.vrf.sk
-    pub = local_params.vrf.pk
-    h = G.hash_to_point(b"1||" + message)
-    v = k * h
+    z = G.hash_to_point(message)
+
+    sk = local_params.vrf.sk
+    pk = local_params.vrf.pk
+
+    h = sk * z
+
     r = G.order().random()
     R = r * g
-    Hr = r * h
-    s = hash_to_bn(encode([g, h, pub, v, R, Hr]))
-    t = r.mod_sub(s * k, G.order())
-    return VrfContainer(value=v.export(), proof=encode((s, t)))
+    Hr = r * z
+    c = hash_to_bn(encode([g, z, pk, h, R, Hr]))
+    s = r.mod_sub(c * sk, G.order())
+    return VrfContainer(value=h.export(), proof=encode((c, s)))
 
 
 @profiled
-def verify_vrf(pub, vrf, message):
+def verify_vrf(pk, vrf, message):
     """Verify a VRF.
 
     Checks whether a VRF value and a proof correspond to the message.
 
-    :param petlib.EcPt pub: VRF public key
+    :param petlib.EcPt pk: VRF public key
     :param VrfContainer vrf: VRF value and proof
     :param bytes message: Message
     """
 
     pp = PublicParams.get_default()
+    message = ensure_binary(message)
 
     G = pp.ec_group
     g = G.generator()
-    h = G.hash_to_point(b"1||" + message)
-    v = EcPt.from_binary(vrf.value, G)
-    s, t = decode(vrf.proof)
-    R = t*g + s*pub
-    Hr = t*h + s*v
-    s_prime = hash_to_bn(encode([g, h, pub, v, R, Hr]))
-    return s_prime == s
+    z = G.hash_to_point(message)
+
+    h = EcPt.from_binary(vrf.value, G)
+    c, s = decode(vrf.proof)
+    R = s * g + c * pk
+    Hr = s * z + c * h
+    c_prime = hash_to_bn(encode([g, z, pk, h, R, Hr]))
+    return c_prime == c
 

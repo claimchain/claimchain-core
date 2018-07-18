@@ -14,6 +14,16 @@ from .crypto import PublicParams, LocalParams
 from .utils import ensure_binary
 
 
+def _generate_prf_key(seed, mode='enc'):
+    if mode not in ['enc', 'proof']:
+        raise ValueError('Invalid mode')
+    pp = PublicParams.get_default()
+    size = pp.nonce_size
+    mode = ensure_binary(mode)
+    seed = ensure_binary(seed)
+    return pp.hash_func(b"prf_%s|%s" % (mode, seed)).digest()[:size]
+
+
 def _compute_claim_key(key, mode='enc'):
     if mode not in ['enc', 'lookup']:
         raise ValueError('Invalid mode')
@@ -79,11 +89,15 @@ def encode_claim(claim_label, claim_content, nonce):
     claim_content = ensure_binary(claim_content)
 
     pp = PublicParams.get_default()
+    params = LocalParams.get_default()
     salted_label = _salt_label(claim_label, nonce)
-    claim_proof = compute_claim_proof(salted_label, claim_content)
+
+    proof_key = _generate_prf_key(salted_label, mode='proof')
+    claim_key = _generate_prf_key(salted_label, mode='enc')
+
+    claim_proof = compute_claim_proof(salted_label, claim_content, proof_key)
     lookup_key = _compute_claim_key(claim_proof.vrf_value, mode='lookup')
 
-    claim_key = os.urandom(pp.enc_key_size)
     enc_key = _compute_claim_key(claim_key, mode='enc')
 
     claim = encode([claim_proof.proof, claim_content])
@@ -92,7 +106,7 @@ def encode_claim(claim_label, claim_content, nonce):
     tag = _fix_bytes(tag)
 
     encoded_claim = encode([encrypted_body, claim_proof.commitment, tag])
-    return (claim_proof.vrf_value, claim_key, claim_proof.proof_key,
+    return (claim_proof.vrf_value, claim_key, proof_key,
             lookup_key, encoded_claim)
 
 
@@ -122,11 +136,10 @@ def decode_claim(owner_vrf_pk, vrf_value, claim_label, claim_key, proof_key,
     claim_proof = ClaimProofContainer(
             vrf_value=vrf_value,
             commitment=com,
-            proof_key=proof_key,
             proof=proof)
 
     if not verify_claim_proof(owner_vrf_pk, claim_proof,
-            salted_label, claim_content):
+            salted_label, claim_content, proof_key):
         raise Exception("Proof verification failed.")
 
     return claim_content

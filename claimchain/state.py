@@ -5,12 +5,13 @@ High-level ClaimChain interface.
 
 import os
 import warnings
+import attr
+
 from time import time
 from base64 import b64encode
 from hashlib import sha256
 from collections import defaultdict
 
-from attr import attrs, attrib, asdict, Factory
 from profiled import profiled
 
 from hippiehug import Chain
@@ -18,30 +19,33 @@ from hippiehug import Tree
 
 from .core import get_capability_lookup_key
 from .core import encode_capability, decode_capability
-from .core import encode_claim, decode_claim, compute_vrf
-from .core import _compute_claim_key, _salt_label
+from .core import encode_claim, decode_claim
+from .core import _compute_claim_key, _salt_label, _generate_prf_key
+
 from .crypto import PublicParams, LocalParams
 from .crypto import sign, verify_signature
+from .crypto.vrf import compute_vrf
+
 from .utils import bytes2ascii, ascii2bytes, pet2ascii, ascii2pet
 from .utils import cached_property
 from .utils import Tree, Blob, ObjectStore
 
 
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 
 
-@attrs
+@attr.s
 class Metadata(object):
     """Block metadata.
 
     :param params: Owner's cryptographic parameters.
     :param identity_info: Owner's identity info (public key)
     """
-    params = attrib()
-    identity_info = attrib(default=None)
+    params = attr.ib()
+    identity_info = attr.ib(default=None)
 
 
-@attrs
+@attr.s
 class Payload(object):
     """Block payload.
 
@@ -52,11 +56,11 @@ class Payload(object):
     :param int version: Protocol version
     """
 
-    mtr_hash  = attrib()
-    metadata  = attrib()
-    nonce     = attrib(default=False)
-    timestamp = attrib(default=Factory(lambda: time()))
-    version   = attrib(default=PROTOCOL_VERSION)
+    mtr_hash  = attr.ib()
+    metadata  = attr.ib()
+    nonce     = attr.ib(default=False)
+    timestamp = attr.ib(default=attr.Factory(lambda: time()))
+    version   = attr.ib(default=PROTOCOL_VERSION)
 
     @staticmethod
     def build(tree, nonce, identity_info=None):
@@ -90,7 +94,7 @@ class Payload(object):
 
     def export(self):
         """Export to dictionary."""
-        return asdict(self)
+        return attr.asdict(self)
 
 
 @profiled
@@ -122,8 +126,7 @@ class State(object):
         self._claim_content_by_label = {}
         self._caps_by_reader_pk = defaultdict(set)
         self._enc_items_map = {}
-        self._vrf_value_by_label = {}
-        self._claim_k_by_label = {}
+        self._aux_by_label = {}
         self._payload = None
         self._tree = None
 
@@ -151,28 +154,31 @@ class State(object):
 
         # Encode claims
         enc_items_map = {}
-        vrf_value_by_label = {}
-        claim_k_by_label = {}
+        aux_by_label = {}
         for claim_label, claim_content in self._claim_content_by_label.items():
-            claim_k = os.urandom(PublicParams.get_default().enc_key_size)
-            vrf_value, lookup_key, enc_claim = encode_claim(
-                    nonce, claim_label, claim_content, claim_k)
+            enc_data = encode_claim(claim_label, claim_content, nonce)
+            vrf_value, claim_key, proof_key, lookup_key, enc_claim = enc_data
             enc_items_map[lookup_key] = enc_claim
-            vrf_value_by_label[claim_label] = vrf_value
-            claim_k_by_label[claim_label] = claim_k
+            aux_by_label[claim_label] = (vrf_value, claim_key, proof_key)
 
         # Encode capabilities
         for reader_dh_pk, caps in self._caps_by_reader_pk.items():
             for claim_label in caps:
                 try:
-                    vrf_value = vrf_value_by_label[claim_label]
+                    vrf_value, claim_key, proof_key = aux_by_label[claim_label]
                 except KeyError:
-                    warnings.warn("VRF for %s not computed. "
+                    warnings.warn("Claim %s not encoded. "
                                   "Skipping adding a capability." \
                                   % claim_label)
                     break
-                lookup_key, enc_cap = encode_capability(reader_dh_pk, nonce,
-                        claim_label, vrf_value, claim_k_by_label[claim_label])
+
+                lookup_key, enc_cap = encode_capability(
+                        reader_dh_pk,
+                        claim_label,
+                        vrf_value,
+                        claim_key,
+                        proof_key,
+                        nonce)
                 enc_items_map[lookup_key] = enc_cap
 
         # Put all the encrypted items in a new tree
@@ -188,8 +194,7 @@ class State(object):
         self._payload = payload
         self._tree = tree
         self._enc_items_map = enc_items_map
-        self._vrf_value_by_label = vrf_value_by_label
-        self._claim_k_by_label = claim_k_by_label
+        self._aux_by_label = aux_by_label
 
         return target_chain.head
 
@@ -200,9 +205,9 @@ class State(object):
         :param bytes claim_label: Claim label
         """
         try:
-            vrf_value = self._vrf_value_by_label[claim_label]
+            vrf_value, _, _ = self._aux_by_label[claim_label]
             cap_lookup_key = get_capability_lookup_key(
-                    reader_dh_pk, self._nonce, claim_label)
+                    reader_dh_pk, claim_label, self._nonce)
 
             # Compute capability entry evidence
             _, raw_cap_evidence = self.tree.evidence(cap_lookup_key)
@@ -217,6 +222,7 @@ class State(object):
             encoded_cap_hash = raw_cap_evidence[-1].item
             encoded_claim_hash = raw_claim_evidence[-1].item
             return object_keys | {encoded_claim_hash} | {encoded_cap_hash}
+
         except KeyError:
             return set()
 
@@ -224,10 +230,8 @@ class State(object):
         """Clear buffer."""
         self._claim_content_by_label.clear()
         self._caps_by_reader_pk.clear()
-
         self._enc_items_map.clear()
-        self._vrf_value_by_label.clear()
-        self._claim_k_by_label.clear()
+        self._aux_by_label.clear()
         self._payload = None
         self._tree = None
 
@@ -273,7 +277,7 @@ class State(object):
 class View(object):
     """View of an existing ClaimChain."""
 
-    def __init__(self, source_chain, source_tree=None, claim_k_by_label=None):
+    def __init__(self, source_chain, source_tree=None):
         """
         :param hippiehug.Chain source_chain: Chain to view
         :param utils.Tree source_tree: Tree object if available
@@ -289,7 +293,6 @@ class View(object):
 
             if ascii2bytes(self.payload.mtr_hash) != self.tree.root_hash:
                 raise ValueError("Supplied tree doesn't match MTR in the chain.")
-        self._claim_k_by_label = claim_k_by_label or {}
 
     @property
     def head(self):
@@ -311,7 +314,7 @@ class View(object):
         """Validate the chain.
 
         .. note ::
-            Don't use this method. It is broken. ¯\\_(ツ)_/¯
+            Don't rely on this method. It's broken. ¯\\_(ツ)_/¯
         """
         owner_sig_pk = self.params.sig.pk
         raw_sig_backup = self._latest_block.aux
@@ -324,18 +327,19 @@ class View(object):
 
     def _lookup_capability(self, claim_label):
         cap_lookup_key = get_capability_lookup_key(
-                self.params.dh.pk, self._nonce, claim_label)
+                self.params.dh.pk, claim_label, self._nonce)
         try:
             cap = self.tree[cap_lookup_key]
         except KeyError:
             raise KeyError("Label does not exist or you don't have "
                            "permission to read.")
-        except AttributeError:
+        except attr.ibuteError:
             raise ValueError("The chain does not have a claim map.")
-        return decode_capability(self.params.dh.pk, self._nonce,
-                                 claim_label, cap)
+        return decode_capability(
+                self.params.dh.pk, claim_label, cap, self._nonce)
 
-    def _lookup_claim(self, claim_label, vrf_value, claim_lookup_key, claim_k):
+    def _lookup_claim(self, claim_lookup_key, claim_label, vrf_value,
+                      claim_key, proof_key):
         try:
             enc_claim = self.tree[claim_lookup_key]
         except KeyError:
@@ -343,8 +347,8 @@ class View(object):
                            "exists.")
         except AttributeError:
             raise ValueError("The chain does not have a claim map.")
-        return decode_claim(self.params.vrf.pk, self._nonce,
-                            claim_label, vrf_value, enc_claim, claim_k)
+        return decode_claim(self.params.vrf.pk, vrf_value, claim_label,
+                            claim_key, proof_key, enc_claim, self._nonce)
 
     def __getitem__(self, claim_label):
         """Get claim by label.
@@ -352,17 +356,23 @@ class View(object):
         :param bytes claim_label: Claim label
         :raises: ``KeyError`` if claim not found or not accessible
         """
+        # Recompute the VRF value if have access to the sk.
         if self._viewer_params.vrf.pk == self.params.vrf.pk:
-            salted_label = _salt_label(self._nonce, claim_label)
-            vrf_value = compute_vrf(salted_label)
-            claim_lookup_key = _compute_claim_key(vrf_value.value, 'lookup')
-            claim = self._lookup_claim(claim_label, vrf_value.value,
-                claim_lookup_key, self._claim_k_by_label[claim_label])
+            pp = PublicParams.get_default()
+            salted_label = _salt_label(claim_label, self._nonce)
+            vrf_bundle = compute_vrf(salted_label)
+            claim_lookup_key = _compute_claim_key(vrf_bundle.value, 'lookup')
+            claim_key = _generate_prf_key(salted_label, mode='enc')
+            proof_key = _generate_prf_key(salted_label, mode='proof')
+            claim = self._lookup_claim(claim_lookup_key, claim_label,
+                    vrf_bundle.value, claim_key, proof_key)
+
+        # Otherwise, query for the capability.
         else:
-            vrf_value, claim_lookup_key, claim_k = \
-                                self._lookup_capability(claim_label)
-            claim = self._lookup_claim(claim_label, vrf_value,
-                                claim_lookup_key, claim_k)
+            lookup_data = self._lookup_capability(claim_label)
+            claim_lookup_key, vrf_value, claim_key, proof_key = lookup_data
+            claim = self._lookup_claim(claim_lookup_key, claim_label,
+                                       vrf_value, claim_key, proof_key)
         return claim
 
     def get(self, claim_label):
@@ -380,3 +390,4 @@ class View(object):
 
     def __hash__(self):
         return hash(self.head)
+
