@@ -332,7 +332,7 @@ class View(object):
         except KeyError:
             raise KeyError("Label does not exist or you don't have "
                            "permission to read.")
-        except attr.ibuteError:
+        except AttributeError:
             raise ValueError("The chain does not have a claim map.")
         return decode_capability(
                 self.params.dh.pk, claim_label, cap, self._nonce)
