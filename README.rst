@@ -18,6 +18,8 @@ claimchain-core
    :target: https://zenodo.org/badge/latestdoi/92275408
    :alt: Zenodo Citation
 
+This is a prototype implementation of `ClaimChain <https://claimchain.github.io>`_ data structure. The implementation from the latest version of the `the academic paper <https://arxiv.org/pdf/1707.06279>`_ can be found in `this branch <https://github.com/claimchain/claimchain-core/tree/enc_claims_with_k_tilde>`_.
+
 Installing
 ==========
 
@@ -121,14 +123,6 @@ claimchain/state.py       High-level ClaimChain interface
 claimchain/core.py        Core operations of encoding claims and capabilities
 claimchain/crypto         Cryptographic utilities, and algorithm implementations
 =======================   =======================================================
-
-
-Simulations
-===========
-
-A core and experimental implementation of ClaimChain, a cryptographic data
-structure. See the `web page <https://claimchain.github.io>`_ to learn about
-ClaimChain.
 
 Check out the `documentation <https://claimchain-core.readthedocs.io/en/latest>`_.
 
