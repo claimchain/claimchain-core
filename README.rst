@@ -21,7 +21,7 @@ claimchain-core
 Installing
 ==========
 
-Until petlib library is [fixed](https://github.com/gdanezis/petlib/pull/19), you have to install ``claimchain`` as follows::
+Until petlib library is `fixed <https://github.com/gdanezis/petlib/pull/19>`_, you have to install ``claimchain`` as follows::
     
     git clone https://github.com/claimchain/claimchain-core
     pip install -r requirements/base.txt
