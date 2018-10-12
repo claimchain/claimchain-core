@@ -6,9 +6,7 @@ defaultcontext==1.0.3
 docutils==0.14
 funcsigs==1.0.2
 future==0.16.0
--e git+https://github.com/gdanezis/rousseau-chain@eb0bf275eba288e9af1cbbbaa3ef8e63e6b63d0b#egg=hippiehug&subdirectory=hippiehug-package
 msgpack-python==0.5.4
-petlib==0.0.43
 pluggy==0.6.0
 profiled==0.1.0
 py==1.5.2
@@ -19,3 +17,5 @@ PyYAML==3.12
 redis==2.10.6
 six==1.11.0
 statistics==1.0.3.5
+-e git+https://github.com/bogdan-kulynych/petlib.git@48a8d614743ef9396d80a76d3636749d103ddb3b#egg=petlib
+-e git+https://github.com/gdanezis/rousseau-chain@d5c82d3250291e1498389cc79cd626461e0ba8ac#egg=hippiehug&subdirectory=hippiehug-package
