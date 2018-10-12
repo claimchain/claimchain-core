@@ -28,7 +28,6 @@ setup(
     ],
     install_requires=[
         'six',
-        'petlib',
         'pyyaml',
         'attrs',
         'base58',
