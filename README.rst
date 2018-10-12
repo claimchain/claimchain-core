@@ -6,7 +6,7 @@
 claimchain-core
 ###############
 
-.. image:: https://travis-ci.org/claimchain/claimchain-core.svg?branch=master
+.. image:: https://travis-ci.org/claimchain/claimchain-core.svg?branch=dev
    :target: https://travis-ci.org/claimchain/claimchain-core
    :alt: Build Status
 
