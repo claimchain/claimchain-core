@@ -18,7 +18,10 @@ claimchain-core
    :target: https://zenodo.org/badge/latestdoi/92275408
    :alt: Zenodo Citation
 
-This is a prototype implementation of `ClaimChain <https://claimchain.github.io>`_ data structure. The implementation from the latest version of the `the academic paper <https://arxiv.org/pdf/1707.06279>`_ can be found in `this branch <https://github.com/claimchain/claimchain-core/tree/enc_claims_with_k_tilde>`_.
+This branch contains an implementation of an earlier version of `ClaimChain
+<https://claimchain.github.io>`_ data structure. The implementation from the latest version of the
+`the academic paper <https://arxiv.org/pdf/1707.06279>`_ can be found in the `dev branch
+<https://github.com/claimchain/claimchain-core/tree/dev>`_.
 
 Installing
 ==========
